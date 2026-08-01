@@ -15,7 +15,7 @@ const POSITIONS = [
 
 // Fixed baseline: the $ value of the portfolio at entry (Fri Jul 31 2026 close).
 // This never changes — it's the "day one" anchor the all-time return is measured against.
-const ENTRY_VALUE = POSITIONS.reduce((sum, p) => sum + p.quantity * p.entryPrice, 0);
+const ENTRY_VALUE = 100000;
 
 module.exports = async (req, res) => {
   const apiKey = process.env.FINNHUB_API_KEY;
