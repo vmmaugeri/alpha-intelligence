@@ -1,0 +1,130 @@
+:root {
+  --paper: #FAF7F1;
+  --ink: #33322E;
+  --muted: #8F8A7C;
+  --accent: #6E8259;
+  --negative: #A14A3F;
+  --hairline: #E6E1D4;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Raleway', -apple-system, sans-serif;
+  font-weight: 400;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 48px 20px 80px;
+}
+
+.page {
+  width: 100%;
+  max-width: 480px;
+}
+
+.back {
+  display: inline-block;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+  margin-bottom: 36px;
+  transition: color 0.2s ease;
+}
+
+.back:hover, .back:focus-visible {
+  color: var(--accent);
+}
+
+h1 {
+  font-family: 'Raleway', sans-serif;
+  font-weight: 500;
+  font-size: 26px;
+  letter-spacing: -0.01em;
+  margin: 0 0 6px;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 32px;
+}
+
+.stat-row {
+  margin-bottom: 12px;
+}
+
+.stat-value {
+  font-family: 'Raleway', sans-serif;
+  font-weight: 500;
+  font-size: 34px;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+.stat-change {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--accent);
+  margin-top: 4px;
+}
+
+.stat-change.negative {
+  color: var(--negative);
+}
+
+.chart-wrap {
+  width: 100%;
+  height: 200px;
+  margin: 24px 0 8px;
+}
+
+#chart {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.positions {
+  list-style: none;
+  margin: 32px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.positions li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 2px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 14.5px;
+}
+
+.pos-name {
+  color: var(--ink);
+}
+
+.pos-weight {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.updated {
+  margin-top: 24px;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
