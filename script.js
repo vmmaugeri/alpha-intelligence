@@ -42,6 +42,37 @@ function formatCurrency(n) {
   });
 }
 
+// --- Market status (real NYSE hours, via America/New_York time) ---
+function getNYParts() {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(new Date());
+  const map = {};
+  parts.forEach((p) => (map[p.type] = p.value));
+  return { weekday: map.weekday, hour: parseInt(map.hour, 10), minute: parseInt(map.minute, 10) };
+}
+
+function isMarketOpen() {
+  const { weekday, hour, minute } = getNYParts();
+  if (weekday === 'Sat' || weekday === 'Sun') return false;
+  const minutesNow = hour * 60 + minute;
+  return minutesNow >= 9 * 60 + 30 && minutesNow < 16 * 60;
+}
+
+function updateMarketStatus() {
+  const text = document.getElementById('marketStatusText');
+  const dot = document.getElementById('statusDot');
+  if (!text) return;
+  const open = isMarketOpen();
+  text.textContent = open ? 'NYSE open' : 'NYSE closed';
+  if (dot) dot.classList.toggle('open', open);
+}
+
 function drawChart(history) {
   const canvas = document.getElementById('chart');
   const ctx = canvas.getContext('2d');
@@ -144,3 +175,4 @@ async function init() {
 }
 
 init();
+updateMarketStatus();
