@@ -105,11 +105,42 @@ h1 {
   color: var(--negative);
 }
 
+.chart-range {
+  display: flex;
+  gap: 6px;
+  margin-top: 20px;
+}
+
+.range-btn {
+  font-family: 'Raleway', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  padding: 4px 11px;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.range-btn:hover {
+  color: var(--ink);
+  border-color: var(--muted);
+}
+
+.range-btn.active {
+  color: var(--paper);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
 .chart-wrap {
   position: relative;
   width: 100%;
   height: 200px;
-  margin: 24px 0 8px;
+  margin: 16px 0 8px;
 }
 
 #chart {
@@ -151,6 +182,22 @@ h1 {
 
 .pos-name {
   color: var(--ink);
+}
+
+.pos-right {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.pos-change {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.pos-change.negative {
+  color: var(--negative);
 }
 
 .pos-weight {
