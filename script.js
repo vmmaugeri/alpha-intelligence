@@ -1,4 +1,5 @@
-const HISTORY_KEY = 'alpha-intelligence-history-v2';
+const HISTORY_KEY = 'alpha-intelligence-history-v3';
+const MAX_HISTORY_POINTS = 2000;
 
 function loadHistory() {
   try {
@@ -12,24 +13,17 @@ function saveHistory(history) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
 }
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-// Records today's actual portfolio dollar value.
-// One entry per day — reloading the page the same day just updates today's point.
-// NOTE: this history lives in the visitor's browser (localStorage), so right now
-// it only builds up for whoever is viewing from the same device/browser over time.
+// Records a new point every time the page loads (not just once per day),
+// so the chart can show intraday movement as you check back throughout
+// the day. Capped so localStorage doesn't grow without bound over time.
+// NOTE: this history lives in the visitor's browser (localStorage), so right
+// now it only builds up for whoever is viewing from the same device/browser.
 function updateHistory(value) {
   const history = loadHistory();
-  const today = todayStr();
-  const existing = history.find((h) => h.date === today);
-  if (existing) {
-    existing.value = value;
-  } else {
-    history.push({ date: today, value });
+  history.push({ t: new Date().toISOString(), value });
+  if (history.length > MAX_HISTORY_POINTS) {
+    history.splice(0, history.length - MAX_HISTORY_POINTS);
   }
-  history.sort((a, b) => a.date.localeCompare(b.date));
   saveHistory(history);
   return history;
 }
@@ -46,9 +40,19 @@ function formatCompact(n) {
   return '$' + (n / 1000).toFixed(1) + 'k';
 }
 
-function formatDateLabel(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00');
+function formatAxisLabel(isoString) {
+  const d = new Date(isoString);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatTooltipLabel(isoString) {
+  const d = new Date(isoString);
+  return d.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 // --- Market status (real NYSE hours, via America/New_York time) ---
@@ -85,6 +89,31 @@ function updateMarketStatus() {
 let chartState = null;
 let lastEntryValue = null;
 
+// Picks clean, round gridline values (e.g. 100k / 105k / 110k) rather than
+// arbitrary fractions of the data range — standard "nice ticks" approach.
+function niceTicks(min, max, targetCount) {
+  if (min === max) {
+    min -= 1;
+    max += 1;
+  }
+  const roughStep = (max - min) / (targetCount - 1);
+  const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+  const residual = roughStep / magnitude;
+  let step;
+  if (residual >= 5) step = 10 * magnitude;
+  else if (residual >= 2) step = 5 * magnitude;
+  else if (residual >= 1) step = 2 * magnitude;
+  else step = magnitude;
+
+  const niceMin = Math.floor(min / step) * step;
+  const niceMax = Math.ceil(max / step) * step;
+  const ticks = [];
+  for (let v = niceMin; v <= niceMax + step * 0.001; v += step) {
+    ticks.push(v);
+  }
+  return ticks;
+}
+
 function drawChart(history, entryValue, hoverIndex) {
   const canvas = document.getElementById('chart');
   const ctx = canvas.getContext('2d');
@@ -107,16 +136,13 @@ function drawChart(history, entryValue, hoverIndex) {
   const plotH = height - padTop - padBottom;
 
   const values = history.map((h) => h.value);
-  const allValues = entryValue != null ? [...values, entryValue] : values;
-  let min = Math.min(...allValues);
-  let max = Math.max(...allValues);
-  if (min === max) {
-    min -= 1;
-    max += 1;
-  }
-  const cushion = (max - min) * 0.15;
-  min -= cushion;
-  max += cushion;
+  const rawValues = entryValue != null ? [...values, entryValue] : values;
+  const rawMin = Math.min(...rawValues);
+  const rawMax = Math.max(...rawValues);
+
+  const ticks = niceTicks(rawMin, rawMax, 4);
+  const min = ticks[0];
+  const max = ticks[ticks.length - 1];
   const range = max - min || 1;
 
   const xFor = (i) =>
@@ -125,11 +151,11 @@ function drawChart(history, entryValue, hoverIndex) {
 
   const points = history.map((h, i) => [xFor(i), yFor(h.value)]);
 
-  // Gridlines with compact $ labels (top / middle / bottom)
+  // Gridlines at round values, with compact $ labels
   ctx.font = '10px Raleway, sans-serif';
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'right';
-  [max - cushion, (max + min) / 2, min + cushion].forEach((v) => {
+  ticks.forEach((v) => {
     const y = yFor(v);
     ctx.strokeStyle = '#E6E1D4';
     ctx.lineWidth = 1;
@@ -192,7 +218,7 @@ function drawChart(history, entryValue, hoverIndex) {
     ctx.stroke();
   }
 
-  // Dots at every point — hollow for past days, solid for today/hovered
+  // Dots at every point — hollow for earlier points, solid for the latest/hovered
   points.forEach(([x, y], i) => {
     const isLast = i === points.length - 1;
     const isHover = i === hoverIndex;
@@ -206,15 +232,15 @@ function drawChart(history, entryValue, hoverIndex) {
     ctx.stroke();
   });
 
-  // Date labels (first / last day)
+  // Date labels (first / last point)
   ctx.fillStyle = '#8F8A7C';
   ctx.font = '10px Raleway, sans-serif';
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
-  ctx.fillText(formatDateLabel(history[0].date), padLeft, height - 4);
+  ctx.fillText(formatAxisLabel(history[0].t), padLeft, height - 4);
   if (history.length > 1) {
     ctx.textAlign = 'right';
-    ctx.fillText(formatDateLabel(history[history.length - 1].date), width - padRight, height - 4);
+    ctx.fillText(formatAxisLabel(history[history.length - 1].t), width - padRight, height - 4);
   }
 
   chartState = { history, points };
@@ -240,7 +266,7 @@ function attachChartInteractivity() {
     });
     const point = chartState.history[nearest];
     drawChart(chartState.history, lastEntryValue, nearest);
-    tooltip.textContent = `${formatDateLabel(point.date)} \u2014 ${formatCurrency(point.value)}`;
+    tooltip.textContent = `${formatTooltipLabel(point.t)} \u2014 ${formatCurrency(point.value)}`;
     tooltip.style.left = chartState.points[nearest][0] + 'px';
     tooltip.style.top = chartState.points[nearest][1] + 'px';
     tooltip.style.opacity = '1';
