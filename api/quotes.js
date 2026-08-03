@@ -51,7 +51,9 @@ module.exports = async (req, res) => {
         name: p.name,
         weight: ((p.quantity * p.entryPrice) / ENTRY_VALUE) * 100,
         currentPrice: p.currentPrice,
-        changePct: p.changePct,
+        entryPrice: p.entryPrice,
+        dayChangePct: p.changePct, // Finnhub's intraday change (prev close -> now)
+        returnPct: ((p.currentPrice - p.entryPrice) / p.entryPrice) * 100, // since your entry
       }))
       .sort((a, b) => b.weight - a.weight);
 
