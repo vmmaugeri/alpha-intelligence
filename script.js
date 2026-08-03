@@ -1,5 +1,5 @@
 const HISTORY_KEY = 'alpha-intelligence-history-v3';
-const MAX_HISTORY_POINTS = 2000;
+const MAX_HISTORY_POINTS = 20000;
 
 function loadHistory() {
   try {
@@ -42,6 +42,9 @@ function formatCompact(n) {
 
 function formatAxisLabel(isoString) {
   const d = new Date(isoString);
+  if (selectedRange === '24H') {
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  }
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
@@ -88,6 +91,29 @@ function updateMarketStatus() {
 
 let chartState = null;
 let lastEntryValue = null;
+let lastHistory = [];
+let selectedRange = '1W';
+
+const RANGE_MS = {
+  '24H': 24 * 60 * 60 * 1000,
+  '1W': 7 * 24 * 60 * 60 * 1000,
+  '1M': 30 * 24 * 60 * 60 * 1000,
+};
+
+// Filters the full history down to the selected window. If a window would be
+// empty (e.g. "24H" before the portfolio is even a day old), falls back to
+// showing whatever's most recent rather than an empty chart.
+function filterHistoryByRange(history, range) {
+  const windowMs = RANGE_MS[range] || RANGE_MS['1W'];
+  const cutoff = Date.now() - windowMs;
+  const filtered = history.filter((h) => new Date(h.t).getTime() >= cutoff);
+  return filtered.length > 0 ? filtered : history.slice(-1);
+}
+
+function renderChart(hoverIndex) {
+  const filtered = filterHistoryByRange(lastHistory, selectedRange);
+  drawChart(filtered, lastEntryValue, hoverIndex);
+}
 
 // Picks clean, round gridline values (e.g. 100k / 105k / 110k) rather than
 // arbitrary fractions of the data range — standard "nice ticks" approach.
@@ -278,6 +304,17 @@ function attachChartInteractivity() {
   });
 }
 
+function attachRangeButtons() {
+  const buttons = document.querySelectorAll('.range-btn');
+  buttons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      selectedRange = btn.dataset.range;
+      buttons.forEach((b) => b.classList.toggle('active', b === btn));
+      renderChart();
+    });
+  });
+}
+
 async function init() {
   const valueEl = document.getElementById('currentValue');
   const changeEl = document.getElementById('allTimeChange');
@@ -294,21 +331,36 @@ async function init() {
     changeEl.classList.toggle('negative', data.allTimeReturnPct < 0);
 
     const history = updateHistory(data.currentValue);
+    lastHistory = history;
     lastEntryValue = data.entryValue;
-    drawChart(history, data.entryValue);
+    renderChart();
 
     const list = document.getElementById('positions');
     list.innerHTML = '';
     data.positions.forEach((p) => {
       const li = document.createElement('li');
+
       const name = document.createElement('span');
       name.className = 'pos-name';
       name.textContent = p.ticker;
+
+      const right = document.createElement('span');
+      right.className = 'pos-right';
+
+      const change = document.createElement('span');
+      change.className = 'pos-change';
+      const changeSign = p.returnPct >= 0 ? '+' : '';
+      change.textContent = `${changeSign}${p.returnPct.toFixed(1)}%`;
+      change.classList.toggle('negative', p.returnPct < 0);
+
       const weight = document.createElement('span');
       weight.className = 'pos-weight';
       weight.textContent = `${Math.round(p.weight)}%`;
+
+      right.appendChild(change);
+      right.appendChild(weight);
       li.appendChild(name);
-      li.appendChild(weight);
+      li.appendChild(right);
       list.appendChild(li);
     });
 
@@ -320,6 +372,16 @@ async function init() {
   }
 }
 
-init();
-updateMarketStatus();
+async function tick() {
+  await init();
+  updateMarketStatus();
+}
+
+tick();
 attachChartInteractivity();
+attachRangeButtons();
+
+// Auto-refresh every 60s — matches the server-side cache window in
+// api/quotes.js, so this is as often as a reload would actually get you
+// fresh data anyway.
+setInterval(tick, 60000);
