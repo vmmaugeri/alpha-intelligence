@@ -10,12 +10,12 @@ const POSITIONS = [
   { ticker: 'IREN', name: 'IREN Limited',          quantity: 271.73, entryPrice: 36.60  },
   { ticker: 'AXTI', name: 'AXT Inc.',              quantity: 165.48, entryPrice: 57.79  },
   { ticker: 'DRAM', name: 'Roundhill Memory ETF',  quantity: 158,    entryPrice: 49.00  },
-  { ticker: 'BRUN', name: 'Boost Run',             quantity: 548.9,  entryPrice: 20.00  },
+  { ticker: 'BRUN', name: 'Boost Run',             quantity: 694.14, entryPrice: 20.21  },
 ];
 
-// Fixed baseline: the $ value of the portfolio at entry (Fri Jul 31 2026 close),
-// computed from actual average fill prices (not the original limit-order prices —
-// those filled better than the limit, so true cost basis is ~$96,953, not $100k).
+// Fixed baseline: the $ value of the portfolio at entry, computed from actual
+// average fill prices. Originally ~$96,953 after the initial 8 buys; the
+// remaining cash was then deployed into BRUN, bringing the total to ~$100k.
 const ENTRY_VALUE = POSITIONS.reduce((sum, p) => sum + p.quantity * p.entryPrice, 0);
 
 module.exports = async (req, res) => {
