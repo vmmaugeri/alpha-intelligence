@@ -3,19 +3,20 @@
 // then computes current value, all-time return, and per-position weight.
 
 const POSITIONS = [
-  { ticker: 'MU',   name: 'Micron Technology',    quantity: 24.3,   entryPrice: 823.03 },
-  { ticker: 'NBIS', name: 'Nebius Group',          quantity: 78.77,  entryPrice: 190.41 },
-  { ticker: 'MRVL', name: 'Marvell Technology',    quantity: 79.97,  entryPrice: 187.56 },
-  { ticker: 'LITE', name: 'Lumentum Holdings',     quantity: 15.4,   entryPrice: 713.94 },
-  { ticker: 'IREN', name: 'IREN Limited',          quantity: 271.73, entryPrice: 36.80  },
-  { ticker: 'AXTI', name: 'AXT Inc.',              quantity: 165.48, entryPrice: 60.43  },
-  { ticker: 'DRAM', name: 'Roundhill Memory ETF',  quantity: 158,    entryPrice: 50.37  },
-  { ticker: 'BRUN', name: 'Boost Run',             quantity: 548.9,  entryPrice: 20.04  },
+  { ticker: 'MU',   name: 'Micron Technology',    quantity: 24.3,   entryPrice: 783.26 },
+  { ticker: 'NBIS', name: 'Nebius Group',          quantity: 78.77,  entryPrice: 185.50 },
+  { ticker: 'MRVL', name: 'Marvell Technology',    quantity: 79.97,  entryPrice: 181.30 },
+  { ticker: 'LITE', name: 'Lumentum Holdings',     quantity: 15.4,   entryPrice: 687.06 },
+  { ticker: 'IREN', name: 'IREN Limited',          quantity: 271.73, entryPrice: 36.60  },
+  { ticker: 'AXTI', name: 'AXT Inc.',              quantity: 165.48, entryPrice: 57.79  },
+  { ticker: 'DRAM', name: 'Roundhill Memory ETF',  quantity: 158,    entryPrice: 49.00  },
+  { ticker: 'BRUN', name: 'Boost Run',             quantity: 548.9,  entryPrice: 20.00  },
 ];
 
-// Fixed baseline: the $ value of the portfolio at entry (Fri Jul 31 2026 close).
-// This never changes — it's the "day one" anchor the all-time return is measured against.
-const ENTRY_VALUE = 100000;
+// Fixed baseline: the $ value of the portfolio at entry (Fri Jul 31 2026 close),
+// computed from actual average fill prices (not the original limit-order prices —
+// those filled better than the limit, so true cost basis is ~$96,953, not $100k).
+const ENTRY_VALUE = POSITIONS.reduce((sum, p) => sum + p.quantity * p.entryPrice, 0);
 
 module.exports = async (req, res) => {
   const apiKey = process.env.FINNHUB_API_KEY;
