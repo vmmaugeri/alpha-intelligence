@@ -1,33 +1,3 @@
-const HISTORY_KEY = 'alpha-intelligence-history-v3';
-const MAX_HISTORY_POINTS = 20000;
-
-function loadHistory() {
-  try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
-  } catch {
-    return [];
-  }
-}
-
-function saveHistory(history) {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-}
-
-// Records a new point every time the page loads (not just once per day),
-// so the chart can show intraday movement as you check back throughout
-// the day. Capped so localStorage doesn't grow without bound over time.
-// NOTE: this history lives in the visitor's browser (localStorage), so right
-// now it only builds up for whoever is viewing from the same device/browser.
-function updateHistory(value) {
-  const history = loadHistory();
-  history.push({ t: new Date().toISOString(), value });
-  if (history.length > MAX_HISTORY_POINTS) {
-    history.splice(0, history.length - MAX_HISTORY_POINTS);
-  }
-  saveHistory(history);
-  return history;
-}
-
 function formatCurrency(n) {
   return n.toLocaleString('en-US', {
     style: 'currency',
@@ -244,18 +214,15 @@ function drawChart(history, entryValue, hoverIndex) {
     ctx.stroke();
   }
 
-  // Dots at every point — hollow for earlier points, solid for the latest/hovered
+  // A dot at the current value, plus one at whatever's being hovered
   points.forEach(([x, y], i) => {
     const isLast = i === points.length - 1;
     const isHover = i === hoverIndex;
-    const filled = isLast || isHover;
+    if (!isLast && !isHover) return;
     ctx.beginPath();
-    ctx.arc(x, y, isHover ? 5 : isLast ? 4 : 2.5, 0, Math.PI * 2);
-    ctx.fillStyle = filled ? '#6E8259' : '#F7F1E3';
+    ctx.arc(x, y, isHover ? 5 : 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#6E8259';
     ctx.fill();
-    ctx.lineWidth = 1.4;
-    ctx.strokeStyle = '#6E8259';
-    ctx.stroke();
   });
 
   // Date labels (first / last point)
@@ -330,8 +297,7 @@ async function init() {
     changeEl.textContent = `${sign}${data.allTimeReturnPct.toFixed(2)}% all time`;
     changeEl.classList.toggle('negative', data.allTimeReturnPct < 0);
 
-    const history = updateHistory(data.currentValue);
-    lastHistory = history;
+    lastHistory = data.history || [];
     lastEntryValue = data.entryValue;
     renderChart();
 
