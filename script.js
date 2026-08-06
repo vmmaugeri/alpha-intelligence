@@ -361,7 +361,7 @@ tick();
 attachChartInteractivity();
 attachRangeButtons();
 
-// Auto-refresh every 60s — matches the server-side cache window in
-// api/quotes.js, so this is as often as a reload would actually get you
-// fresh data anyway.
-setInterval(tick, 60000);
+// Auto-refresh every 20s — matches the server-side cache window in
+// api/quotes.js. Well within Finnhub's free-tier rate limit (60/min;
+// this uses 8 per refresh, so ~24/min even at this pace).
+setInterval(tick, 20000);
