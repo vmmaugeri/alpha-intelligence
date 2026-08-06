@@ -33,6 +33,7 @@ const HISTORY_KEY = 'alpha-intelligence-history-v2';
 const MAX_HISTORY_POINTS = 5000;
 const MIN_INTERVAL_MS = 55 * 1000; // don't log a new point more than ~once/min, even under heavy traffic
 const MAX_PLAUSIBLE_SWING = 0.08; // reject a point implying an >8% move in under a minute — almost certainly bad data, not a real swing
+const ORIGIN_TIMESTAMP = '2026-08-01T00:00:00Z'; // matches the page's stated start date
 
 async function upstashGetPath(path) {
   const r = await fetch(`${UPSTASH_URL}${path}`, {
@@ -65,10 +66,30 @@ async function readAndUpdateHistory(currentValue) {
     history = [];
   }
 
+  // One-time seed: if the shared history is still empty, anchor it with the
+  // known, exact $100k entry point — we don't have a live feed reaching back
+  // to day one, but this one number is certain, so the chart always shows a
+  // true starting point rather than an arbitrary first live reading.
+  if (history.length === 0) {
+    const originPoint = { t: ORIGIN_TIMESTAMP, value: ENTRY_VALUE };
+    await upstashPostPath(`/rpush/${encodeURIComponent(HISTORY_KEY)}`, JSON.stringify(originPoint));
+    history.push(originPoint);
+  }
+
   const last = history[history.length - 1];
   const now = Date.now();
-  const dueForNewPoint = !last || now - new Date(last.t).getTime() >= MIN_INTERVAL_MS;
-  const isPlausible = !last || Math.abs(currentValue - last.value) / last.value <= MAX_PLAUSIBLE_SWING;
+  const msSinceLast = last ? now - new Date(last.t).getTime() : Infinity;
+  const dueForNewPoint = !last || msSinceLast >= MIN_INTERVAL_MS;
+
+  // Only apply the swing-sanity check against a *recent* point (last few
+  // minutes) — a bigger gap since the last point (like right after the
+  // seeded Aug 1 origin, or after the page hasn't been checked in a while)
+  // can easily span real market movement, not just bad data.
+  const RECENT_WINDOW_MS = 5 * 60 * 1000;
+  const isPlausible =
+    !last ||
+    msSinceLast > RECENT_WINDOW_MS ||
+    Math.abs(currentValue - last.value) / last.value <= MAX_PLAUSIBLE_SWING;
 
   if (dueForNewPoint && isPlausible) {
     const point = { t: new Date().toISOString(), value: currentValue };
