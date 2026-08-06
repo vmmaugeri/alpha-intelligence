@@ -66,14 +66,18 @@ async function readAndUpdateHistory(currentValue) {
     history = [];
   }
 
-  // One-time seed: if the shared history is still empty, anchor it with the
-  // known, exact $100k entry point — we don't have a live feed reaching back
-  // to day one, but this one number is certain, so the chart always shows a
-  // true starting point rather than an arbitrary first live reading.
-  if (history.length === 0) {
+  // Seed the origin point if it's missing — checks whether the *first*
+  // recorded point is already at-or-before the entry date, rather than just
+  // checking for an empty list, since a key created after the portfolio
+  // started can already have later data in it without ever having the true
+  // starting anchor. Inserted at the front (LPUSH) so it doesn't disturb
+  // whatever's already been recorded.
+  const originTime = new Date(ORIGIN_TIMESTAMP).getTime();
+  const hasOrigin = history.length > 0 && new Date(history[0].t).getTime() <= originTime;
+  if (!hasOrigin) {
     const originPoint = { t: ORIGIN_TIMESTAMP, value: ENTRY_VALUE };
-    await upstashPostPath(`/rpush/${encodeURIComponent(HISTORY_KEY)}`, JSON.stringify(originPoint));
-    history.push(originPoint);
+    await upstashPostPath(`/lpush/${encodeURIComponent(HISTORY_KEY)}`, JSON.stringify(originPoint));
+    history.unshift(originPoint);
   }
 
   const last = history[history.length - 1];
@@ -142,7 +146,7 @@ module.exports = async (req, res) => {
       }))
       .sort((a, b) => b.weight - a.weight);
 
-    res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=30');
+    res.setHeader('Cache-Control', 's-maxage=20, stale-while-revalidate=10');
     res.status(200).json({
       currentValue,
       entryValue: ENTRY_VALUE,
