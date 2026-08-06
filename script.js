@@ -282,6 +282,13 @@ function attachRangeButtons() {
   });
 }
 
+function setMover(el, position) {
+  if (!el || !position) return;
+  const sign = position.dayChangePct >= 0 ? '+' : '';
+  el.textContent = `${position.ticker} ${sign}${position.dayChangePct.toFixed(1)}%`;
+  el.classList.toggle('negative', position.dayChangePct < 0);
+}
+
 async function init() {
   const valueEl = document.getElementById('currentValue');
   const changeEl = document.getElementById('allTimeChange');
@@ -329,6 +336,13 @@ async function init() {
       li.appendChild(right);
       list.appendChild(li);
     });
+
+    if (data.positions.length > 0) {
+      const gainer = data.positions.reduce((a, b) => (b.dayChangePct > a.dayChangePct ? b : a));
+      const loser = data.positions.reduce((a, b) => (b.dayChangePct < a.dayChangePct ? b : a));
+      setMover(document.getElementById('gainerValue'), gainer);
+      setMover(document.getElementById('loserValue'), loser);
+    }
 
     document.getElementById('updated').textContent =
       'Updated ' + new Date(data.updatedAt).toLocaleString();
