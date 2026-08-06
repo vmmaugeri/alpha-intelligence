@@ -21,14 +21,21 @@ const ENTRY_VALUE = POSITIONS.reduce((sum, p) => sum + p.quantity * p.entryPrice
 // --- Shared history, stored in Upstash Redis (not per-visitor localStorage) ---
 // This is what makes the chart identical for every visitor: everyone reads and
 // appends to the same record instead of each browser keeping its own copy.
+//
+// Stored as a Redis LIST (via RPUSH) rather than a single JSON blob (via GET/SET).
+// A GET-modify-SET cycle isn't safe when more than one request can happen close
+// together — two requests can both read the same starting point and then one
+// silently overwrites the other's save. RPUSH is atomic: concurrent pushes can
+// never stomp on each other, no matter how many happen at once.
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
-const HISTORY_KEY = 'alpha-intelligence-history';
+const HISTORY_KEY = 'alpha-intelligence-history-v2';
 const MAX_HISTORY_POINTS = 5000;
 const MIN_INTERVAL_MS = 55 * 1000; // don't log a new point more than ~once/min, even under heavy traffic
+const MAX_PLAUSIBLE_SWING = 0.08; // reject a point implying an >8% move in under a minute — almost certainly bad data, not a real swing
 
-async function upstashGet(key) {
-  const r = await fetch(`${UPSTASH_URL}/get/${encodeURIComponent(key)}`, {
+async function upstashGetPath(path) {
+  const r = await fetch(`${UPSTASH_URL}${path}`, {
     headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` },
   });
   if (!r.ok) return null;
@@ -36,12 +43,15 @@ async function upstashGet(key) {
   return data.result;
 }
 
-async function upstashSet(key, value) {
-  await fetch(`${UPSTASH_URL}/set/${encodeURIComponent(key)}`, {
+async function upstashPostPath(path, body) {
+  const r = await fetch(`${UPSTASH_URL}${path}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` },
-    body: value,
+    body,
   });
+  if (!r.ok) return null;
+  const data = await r.json();
+  return data.result;
 }
 
 async function readAndUpdateHistory(currentValue) {
@@ -49,20 +59,22 @@ async function readAndUpdateHistory(currentValue) {
 
   let history = [];
   try {
-    const raw = await upstashGet(HISTORY_KEY);
-    history = raw ? JSON.parse(raw) : [];
+    const raw = await upstashGetPath(`/lrange/${encodeURIComponent(HISTORY_KEY)}/0/-1`);
+    history = Array.isArray(raw) ? raw.map((s) => JSON.parse(s)) : [];
   } catch {
     history = [];
   }
 
   const last = history[history.length - 1];
   const now = Date.now();
-  if (!last || now - new Date(last.t).getTime() >= MIN_INTERVAL_MS) {
-    history.push({ t: new Date().toISOString(), value: currentValue });
-    if (history.length > MAX_HISTORY_POINTS) {
-      history.splice(0, history.length - MAX_HISTORY_POINTS);
-    }
-    await upstashSet(HISTORY_KEY, JSON.stringify(history));
+  const dueForNewPoint = !last || now - new Date(last.t).getTime() >= MIN_INTERVAL_MS;
+  const isPlausible = !last || Math.abs(currentValue - last.value) / last.value <= MAX_PLAUSIBLE_SWING;
+
+  if (dueForNewPoint && isPlausible) {
+    const point = { t: new Date().toISOString(), value: currentValue };
+    await upstashPostPath(`/rpush/${encodeURIComponent(HISTORY_KEY)}`, JSON.stringify(point));
+    await upstashGetPath(`/ltrim/${encodeURIComponent(HISTORY_KEY)}/-${MAX_HISTORY_POINTS}/-1`);
+    history.push(point);
   }
 
   return history;
