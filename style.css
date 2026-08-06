@@ -252,6 +252,36 @@ h1 {
   letter-spacing: 0.03em;
 }
 
+.movers {
+  display: flex;
+  gap: 32px;
+  margin-top: 28px;
+}
+
+.mover {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mover-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.mover-value {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.mover-value.negative {
+  color: var(--negative);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
