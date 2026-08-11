@@ -35,6 +35,27 @@ const MIN_INTERVAL_MS = 55 * 1000; // don't log a new point more than ~once/min,
 const MAX_PLAUSIBLE_SWING = 0.08; // reject a point implying an >8% move in under a minute — almost certainly bad data, not a real swing
 const ORIGIN_TIMESTAMP = '2026-08-01T00:00:00Z'; // matches the page's stated start date
 
+// Checks real NYSE hours in America/New_York — used to skip logging new
+// history points while the market's closed. Finnhub just echoes the last
+// close price overnight/weekends, so without this the chart fills up with
+// long runs of identical flat points instead of jumping cleanly from one
+// session's close to the next session's open.
+function isMarketOpenNow() {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(new Date());
+  const map = {};
+  parts.forEach((p) => (map[p.type] = p.value));
+  if (map.weekday === 'Sat' || map.weekday === 'Sun') return false;
+  const minutesNow = parseInt(map.hour, 10) * 60 + parseInt(map.minute, 10);
+  return minutesNow >= 9 * 60 + 30 && minutesNow < 16 * 60;
+}
+
 async function upstashGetPath(path) {
   const r = await fetch(`${UPSTASH_URL}${path}`, {
     headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` },
@@ -95,7 +116,7 @@ async function readAndUpdateHistory(currentValue) {
     msSinceLast > RECENT_WINDOW_MS ||
     Math.abs(currentValue - last.value) / last.value <= MAX_PLAUSIBLE_SWING;
 
-  if (dueForNewPoint && isPlausible) {
+  if (dueForNewPoint && isPlausible && isMarketOpenNow()) {
     const point = { t: new Date().toISOString(), value: currentValue };
     await upstashPostPath(`/rpush/${encodeURIComponent(HISTORY_KEY)}`, JSON.stringify(point));
     await upstashGetPath(`/ltrim/${encodeURIComponent(HISTORY_KEY)}/-${MAX_HISTORY_POINTS}/-1`);
