@@ -22,6 +22,25 @@ const HISTORY_KEY = 'alpha-intelligence-history-v2';
 const MAX_HISTORY_POINTS = 5000;
 const MAX_PLAUSIBLE_SWING = 0.08; // same sanity guard as api/quotes.js
 
+// Same check as api/quotes.js — skip logging while the market's closed,
+// since Finnhub just echoes the last close price overnight/weekends and
+// that would otherwise fill the chart with long flat runs.
+function isMarketOpenNow() {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(new Date());
+  const map = {};
+  parts.forEach((p) => (map[p.type] = p.value));
+  if (map.weekday === 'Sat' || map.weekday === 'Sun') return false;
+  const minutesNow = parseInt(map.hour, 10) * 60 + parseInt(map.minute, 10);
+  return minutesNow >= 9 * 60 + 30 && minutesNow < 16 * 60;
+}
+
 async function upstashGetPath(path) {
   const r = await fetch(`${UPSTASH_URL}${path}`, {
     headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` },
@@ -74,6 +93,11 @@ module.exports = async (req, res) => {
     const rawLast = await upstashGetPath(`/lrange/${encodeURIComponent(HISTORY_KEY)}/-1/-1`);
     const last = Array.isArray(rawLast) && rawLast.length > 0 ? JSON.parse(rawLast[0]) : null;
     const isPlausible = !last || Math.abs(currentValue - last.value) / last.value <= MAX_PLAUSIBLE_SWING;
+
+    if (!isMarketOpenNow()) {
+      res.status(200).json({ ok: true, skipped: 'market closed, not logged' });
+      return;
+    }
 
     if (!isPlausible) {
       res.status(200).json({ ok: true, skipped: 'implausible swing, not logged' });
