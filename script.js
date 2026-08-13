@@ -62,27 +62,61 @@ function updateMarketStatus() {
 let chartState = null;
 let lastEntryValue = null;
 let lastHistory = [];
+let lastCurrentValue = null;
 let selectedRange = '1W';
 
 const RANGE_MS = {
   '24H': 24 * 60 * 60 * 1000,
   '1W': 7 * 24 * 60 * 60 * 1000,
   '1M': 30 * 24 * 60 * 60 * 1000,
+  // 'All' deliberately has no entry — handled as a special case (no time filter at all)
 };
 
-// Filters the full history down to the selected window. If a window would be
-// empty (e.g. "24H" before the portfolio is even a day old), falls back to
-// showing whatever's most recent rather than an empty chart.
+const RANGE_LABELS = {
+  '24H': 'past 24h',
+  '1W': 'past week',
+  '1M': 'past month',
+  All: 'all time',
+};
+
+// Filters the full history down to the selected window. "All" skips the time
+// filter entirely, so it always includes the true origin point. If a window
+// would otherwise be empty (e.g. "24H" before the portfolio is even a day
+// old), falls back to showing whatever's most recent rather than an empty
+// chart.
 function filterHistoryByRange(history, range) {
+  if (range === 'All') return history;
   const windowMs = RANGE_MS[range] || RANGE_MS['1W'];
   const cutoff = Date.now() - windowMs;
   const filtered = history.filter((h) => new Date(h.t).getTime() >= cutoff);
   return filtered.length > 0 ? filtered : history.slice(-1);
 }
 
+// % change from the start of the selected window to the live current value
+// (not the last logged point, which can be a few minutes stale) — this is
+// what drives the number shown next to the range buttons.
+function computeRangeReturnPct(filteredHistory, currentValue) {
+  if (!filteredHistory || filteredHistory.length === 0 || currentValue == null) return null;
+  const startValue = filteredHistory[0].value;
+  if (!startValue) return null;
+  return ((currentValue - startValue) / startValue) * 100;
+}
+
+function updateRangeStat() {
+  const changeEl = document.getElementById('allTimeChange');
+  if (!changeEl) return;
+  const filtered = filterHistoryByRange(lastHistory, selectedRange);
+  const pct = computeRangeReturnPct(filtered, lastCurrentValue);
+  if (pct == null) return;
+  const sign = pct >= 0 ? '+' : '';
+  changeEl.textContent = `${sign}${pct.toFixed(2)}% ${RANGE_LABELS[selectedRange] || ''}`;
+  changeEl.classList.toggle('negative', pct < 0);
+}
+
 function renderChart(hoverIndex) {
   const filtered = filterHistoryByRange(lastHistory, selectedRange);
   drawChart(filtered, lastEntryValue, hoverIndex);
+  updateRangeStat();
 }
 
 // Picks clean, round gridline values (e.g. 100k / 105k / 110k) rather than
@@ -291,7 +325,6 @@ function setMover(el, position) {
 
 async function init() {
   const valueEl = document.getElementById('currentValue');
-  const changeEl = document.getElementById('allTimeChange');
 
   try {
     const res = await fetch('/api/quotes');
@@ -300,12 +333,9 @@ async function init() {
 
     valueEl.textContent = formatCurrency(data.currentValue);
 
-    const sign = data.allTimeReturnPct >= 0 ? '+' : '';
-    changeEl.textContent = `${sign}${data.allTimeReturnPct.toFixed(2)}% all time`;
-    changeEl.classList.toggle('negative', data.allTimeReturnPct < 0);
-
     lastHistory = data.history || [];
     lastEntryValue = data.entryValue;
+    lastCurrentValue = data.currentValue;
     renderChart();
 
     const list = document.getElementById('positions');
