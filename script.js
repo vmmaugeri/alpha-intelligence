@@ -334,7 +334,7 @@ async function init() {
     valueEl.textContent = formatCurrency(data.currentValue);
 
     lastHistory = data.history || [];
-    lastEntryValue = data.entryValue;
+    lastEntryValue = (lastHistory[0] && lastHistory[0].value) || data.entryValue;
     lastCurrentValue = data.currentValue;
     renderChart();
 
