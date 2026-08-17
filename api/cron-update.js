@@ -1,30 +1,21 @@
-// Vercel serverless function: /api/cron-update
-// Called by an external scheduler (cron-job.org) on a fixed schedule (e.g.
-// every 5 minutes) to log a portfolio value point to the shared history —
-// independent of whether anyone actually has the page open. Vercel's own
-// Hobby-plan cron is capped at once/day, so this uses a free external
-// pinger instead; this route is a normal HTTP endpoint either way.
-
 const POSITIONS = [
-  { ticker: 'MU',   quantity: 24.3,   entryPrice: 783.26 },
-  { ticker: 'NBIS', quantity: 78.77,  entryPrice: 185.50 },
-  { ticker: 'MRVL', quantity: 79.97,  entryPrice: 181.30 },
-  { ticker: 'LITE', quantity: 15.4,   entryPrice: 687.06 },
-  { ticker: 'IREN', quantity: 271.73, entryPrice: 36.60  },
-  { ticker: 'AXTI', quantity: 165.48, entryPrice: 57.79  },
-  { ticker: 'DRAM', quantity: 158,    entryPrice: 49.00  },
+  { ticker: 'SILC', quantity: 125.64, entryPrice: 49.99  },
   { ticker: 'BRUN', quantity: 694.14, entryPrice: 20.21  },
+  { ticker: 'INTC', quantity: 176.28, entryPrice: 102.16 },
+  { ticker: 'AMZN', quantity: 68.35,  entryPrice: 263.37 },
+  { ticker: 'NBIS', quantity: 70.87,  entryPrice: 185.50 },
+  { ticker: 'VIAV', quantity: 260.6,  entryPrice: 43.02  },
+  { ticker: 'CIEN', quantity: 40.42,  entryPrice: 429.61 },
+  { ticker: 'MRVL', quantity: 55.52,  entryPrice: 181.30 },
+  { ticker: 'LITE', quantity: 11.19,  entryPrice: 687.06 },
 ];
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 const HISTORY_KEY = 'alpha-intelligence-history-v2';
 const MAX_HISTORY_POINTS = 5000;
-const MAX_PLAUSIBLE_SWING = 0.08; // same sanity guard as api/quotes.js
+const MAX_PLAUSIBLE_SWING = 0.08;
 
-// Same check as api/quotes.js — skip logging while the market's closed,
-// since Finnhub just echoes the last close price overnight/weekends and
-// that would otherwise fill the chart with long flat runs.
 function isMarketOpenNow() {
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
@@ -62,10 +53,6 @@ async function upstashPostPath(path, body) {
 }
 
 module.exports = async (req, res) => {
-  // Optional shared-secret check — only enforced if CRON_SECRET is set, so
-  // this works immediately without requiring extra setup, but can be locked
-  // down by adding that env var and putting the same value in the scheduler's
-  // URL as ?secret=...
   const secret = process.env.CRON_SECRET;
   if (secret && req.query.secret !== secret) {
     res.status(401).json({ error: 'Unauthorized' });
