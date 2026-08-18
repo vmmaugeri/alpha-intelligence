@@ -69,7 +69,6 @@ const RANGE_MS = {
   '24H': 24 * 60 * 60 * 1000,
   '1W': 7 * 24 * 60 * 60 * 1000,
   '1M': 30 * 24 * 60 * 60 * 1000,
-  // 'All' deliberately has no entry — handled as a special case (no time filter at all)
 };
 
 const RANGE_LABELS = {
@@ -79,11 +78,6 @@ const RANGE_LABELS = {
   All: 'all time',
 };
 
-// Filters the full history down to the selected window. "All" skips the time
-// filter entirely, so it always includes the true origin point. If a window
-// would otherwise be empty (e.g. "24H" before the portfolio is even a day
-// old), falls back to showing whatever's most recent rather than an empty
-// chart.
 function filterHistoryByRange(history, range) {
   if (range === 'All') return history;
   const windowMs = RANGE_MS[range] || RANGE_MS['1W'];
@@ -92,9 +86,6 @@ function filterHistoryByRange(history, range) {
   return filtered.length > 0 ? filtered : history.slice(-1);
 }
 
-// % change from the start of the selected window to the live current value
-// (not the last logged point, which can be a few minutes stale) — this is
-// what drives the number shown next to the range buttons.
 function computeRangeReturnPct(filteredHistory, currentValue) {
   if (!filteredHistory || filteredHistory.length === 0 || currentValue == null) return null;
   const startValue = filteredHistory[0].value;
@@ -119,8 +110,6 @@ function renderChart(hoverIndex) {
   updateRangeStat();
 }
 
-// Picks clean, round gridline values (e.g. 100k / 105k / 110k) rather than
-// arbitrary fractions of the data range — standard "nice ticks" approach.
 function niceTicks(min, max, targetCount) {
   if (min === max) {
     min -= 1;
@@ -169,26 +158,15 @@ function drawChart(history, entryValue, hoverIndex) {
   const dataMin = Math.min(...values);
   const dataMax = Math.max(...values);
 
-  // Scale to the real data first, so peaks/troughs stay visible instead of
-  // getting flattened by a wide axis. The Aug 1 origin line only gets folded
-  // into the visible range if doing so keeps the total span under 20k — the
-  // "All" view is exempt from that cap since showing the full journey since
-  // inception is the whole point of that button. Real data is never hidden
-  // or clipped either way — only the optional origin line is conditional.
-  const MAX_ORIGIN_RANGE = 20000;
   const forceOrigin = selectedRange === 'All';
   let rawMin = dataMin;
   let rawMax = dataMax;
   let showOriginLine = false;
 
-  if (entryValue != null) {
-    const withOriginMin = Math.min(dataMin, entryValue);
-    const withOriginMax = Math.max(dataMax, entryValue);
-    if (forceOrigin || withOriginMax - withOriginMin <= MAX_ORIGIN_RANGE) {
-      rawMin = withOriginMin;
-      rawMax = withOriginMax;
-      showOriginLine = true;
-    }
+  if (entryValue != null && forceOrigin) {
+    rawMin = Math.min(dataMin, entryValue);
+    rawMax = Math.max(dataMax, entryValue);
+    showOriginLine = true;
   }
 
   const ticks = niceTicks(rawMin, rawMax, 4);
@@ -202,7 +180,6 @@ function drawChart(history, entryValue, hoverIndex) {
 
   const points = history.map((h, i) => [xFor(i), yFor(h.value)]);
 
-  // Gridlines at round values, with compact $ labels
   ctx.font = '10px Raleway, sans-serif';
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'right';
@@ -218,7 +195,6 @@ function drawChart(history, entryValue, hoverIndex) {
     ctx.fillText(formatCompact(v), padLeft - 8, y);
   });
 
-  // Dashed baseline at the entry value — only when it fits the visible range
   if (entryValue != null && showOriginLine) {
     const by = yFor(entryValue);
     ctx.strokeStyle = '#C9C1AE';
@@ -231,7 +207,6 @@ function drawChart(history, entryValue, hoverIndex) {
     ctx.setLineDash([]);
   }
 
-  // Soft fill under the line
   const gradient = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
   gradient.addColorStop(0, 'rgba(110, 130, 89, 0.22)');
   gradient.addColorStop(1, 'rgba(110, 130, 89, 0)');
@@ -246,7 +221,6 @@ function drawChart(history, entryValue, hoverIndex) {
   ctx.fillStyle = gradient;
   ctx.fill();
 
-  // Performance line
   ctx.strokeStyle = '#6E8259';
   ctx.lineWidth = 2;
   ctx.lineJoin = 'round';
@@ -258,7 +232,6 @@ function drawChart(history, entryValue, hoverIndex) {
   });
   ctx.stroke();
 
-  // Hover guide line
   if (hoverIndex != null && points[hoverIndex]) {
     const [hx] = points[hoverIndex];
     ctx.strokeStyle = 'rgba(51, 50, 46, 0.22)';
@@ -269,7 +242,6 @@ function drawChart(history, entryValue, hoverIndex) {
     ctx.stroke();
   }
 
-  // A dot at the current value, plus one at whatever's being hovered
   points.forEach(([x, y], i) => {
     const isLast = i === points.length - 1;
     const isHover = i === hoverIndex;
@@ -280,7 +252,6 @@ function drawChart(history, entryValue, hoverIndex) {
     ctx.fill();
   });
 
-  // Date labels (first / last point)
   ctx.fillStyle = '#8F8A7C';
   ctx.font = '10px Raleway, sans-serif';
   ctx.textBaseline = 'alphabetic';
@@ -412,7 +383,4 @@ tick();
 attachChartInteractivity();
 attachRangeButtons();
 
-// Auto-refresh every 20s — matches the server-side cache window in
-// api/quotes.js. Well within Finnhub's free-tier rate limit (60/min;
-// this uses 8 per refresh, so ~24/min even at this pace).
 setInterval(tick, 20000);
