@@ -166,9 +166,30 @@ function drawChart(history, entryValue, hoverIndex) {
   const plotH = height - padTop - padBottom;
 
   const values = history.map((h) => h.value);
-  const rawValues = entryValue != null ? [...values, entryValue] : values;
-  const rawMin = Math.min(...rawValues);
-  const rawMax = Math.max(...rawValues);
+  const dataMin = Math.min(...values);
+  const dataMax = Math.max(...values);
+
+  // Scale to the real data first, so peaks/troughs stay visible instead of
+  // getting flattened by a wide axis. The Aug 1 origin line only gets folded
+  // into the visible range if doing so keeps the total span under 20k — the
+  // "All" view is exempt from that cap since showing the full journey since
+  // inception is the whole point of that button. Real data is never hidden
+  // or clipped either way — only the optional origin line is conditional.
+  const MAX_ORIGIN_RANGE = 20000;
+  const forceOrigin = selectedRange === 'All';
+  let rawMin = dataMin;
+  let rawMax = dataMax;
+  let showOriginLine = false;
+
+  if (entryValue != null) {
+    const withOriginMin = Math.min(dataMin, entryValue);
+    const withOriginMax = Math.max(dataMax, entryValue);
+    if (forceOrigin || withOriginMax - withOriginMin <= MAX_ORIGIN_RANGE) {
+      rawMin = withOriginMin;
+      rawMax = withOriginMax;
+      showOriginLine = true;
+    }
+  }
 
   const ticks = niceTicks(rawMin, rawMax, 4);
   const min = ticks[0];
@@ -197,8 +218,8 @@ function drawChart(history, entryValue, hoverIndex) {
     ctx.fillText(formatCompact(v), padLeft - 8, y);
   });
 
-  // Dashed baseline at the entry value
-  if (entryValue != null) {
+  // Dashed baseline at the entry value — only when it fits the visible range
+  if (entryValue != null && showOriginLine) {
     const by = yFor(entryValue);
     ctx.strokeStyle = '#C9C1AE';
     ctx.lineWidth = 1;
