@@ -374,8 +374,12 @@ function renderClosedPositions() {
   if (!list) return;
   list.innerHTML = '';
 
-  CLOSED_POSITIONS.forEach((pos) => {
-    const { soldQty, gainPct, gainUsd } = computeClosedSummary(pos);
+  const ranked = CLOSED_POSITIONS.map((pos) => ({ pos, summary: computeClosedSummary(pos) })).sort(
+    (a, b) => b.summary.gainPct - a.summary.gainPct
+  );
+
+  ranked.forEach(({ pos, summary }) => {
+    const { gainPct, gainUsd } = summary;
     const li = document.createElement('li');
 
     const name = document.createElement('span');
@@ -387,9 +391,7 @@ function renderClosedPositions() {
 
     const status = document.createElement('span');
     status.className = 'closed-status';
-    status.textContent = `${pos.status} \u00b7 ${soldQty.toLocaleString('en-US', {
-      maximumFractionDigits: 2,
-    })} sh sold`;
+    status.textContent = pos.status;
 
     name.appendChild(ticker);
     name.appendChild(status);
@@ -397,7 +399,9 @@ function renderClosedPositions() {
     const change = document.createElement('span');
     change.className = 'closed-change';
     const sign = gainPct >= 0 ? '+' : '';
-    change.textContent = `${sign}${gainPct.toFixed(1)}% (${sign}${formatCurrency(gainUsd)})`;
+    change.innerHTML = `${sign}${gainPct.toFixed(1)}% <span class="closed-usd">(${sign}${formatCurrency(
+      gainUsd
+    )})</span>`;
     change.classList.toggle('negative', gainPct < 0);
 
     li.appendChild(name);
