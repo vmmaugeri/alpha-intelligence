@@ -297,6 +297,115 @@ function attachChartInteractivity() {
   });
 }
 
+// --- Closed & trimmed positions ---
+// Static historical record (no live prices needed — these are settled).
+// Each entry's "buys" represents only the cost basis of shares that were
+// actually sold (not the full original holding, for positions that are
+// merely trimmed and still partly held) — this keeps the math scoped to
+// exactly the sold portion. Gain % and $ are computed from these raw
+// tranches rather than typed in, so the numbers are directly checkable.
+const CLOSED_POSITIONS = [
+  {
+    ticker: 'IREN',
+    status: 'Closed',
+    buys: [{ qty: 271.73, price: 36.60 }],
+    sells: [{ qty: 271.73, price: 44.58 }],
+  },
+  {
+    ticker: 'DRAM',
+    status: 'Closed',
+    buys: [{ qty: 158, price: 49.00 }],
+    sells: [{ qty: 158, price: 58.02 }],
+  },
+  {
+    ticker: 'MU',
+    status: 'Closed',
+    buys: [{ qty: 24.3, price: 783.26 }],
+    sells: [
+      { qty: 4.85, price: 975.58 },
+      { qty: 19.45, price: 999.60 },
+    ],
+  },
+  {
+    ticker: 'MRVL',
+    status: 'Trimmed',
+    buys: [{ qty: 24.45, price: 181.30 }],
+    sells: [{ qty: 24.45, price: 222.25 }],
+  },
+  {
+    ticker: 'LITE',
+    status: 'Trimmed',
+    buys: [{ qty: 4.21, price: 687.06 }],
+    sells: [{ qty: 4.21, price: 890.00 }],
+  },
+  {
+    ticker: 'AXTI',
+    status: 'Closed',
+    buys: [
+      { qty: 165.48, price: 57.79 },
+      { qty: 10.32, price: 77.66 },
+    ],
+    sells: [
+      { qty: 69.4, price: 78.25 },
+      { qty: 46.44, price: 77.68 },
+      { qty: 59.96, price: 88.01 },
+    ],
+  },
+  {
+    ticker: 'NBIS',
+    status: 'Trimmed',
+    buys: [{ qty: 7.9, price: 185.50 }],
+    sells: [{ qty: 7.9, price: 272.82 }],
+  },
+];
+
+function computeClosedSummary(pos) {
+  const soldQty = pos.sells.reduce((s, x) => s + x.qty, 0);
+  const soldValue = pos.sells.reduce((s, x) => s + x.qty * x.price, 0);
+  const boughtValue = pos.buys.reduce((s, x) => s + x.qty * x.price, 0);
+  const gainPct = ((soldValue - boughtValue) / boughtValue) * 100;
+  const gainUsd =
+    pos.usdCostBasis != null ? pos.usdCostBasis * (gainPct / 100) : soldValue - boughtValue;
+  return { soldQty, gainPct, gainUsd };
+}
+
+function renderClosedPositions() {
+  const list = document.getElementById('closedPositions');
+  if (!list) return;
+  list.innerHTML = '';
+
+  CLOSED_POSITIONS.forEach((pos) => {
+    const { soldQty, gainPct, gainUsd } = computeClosedSummary(pos);
+    const li = document.createElement('li');
+
+    const name = document.createElement('span');
+    name.className = 'closed-name';
+
+    const ticker = document.createElement('span');
+    ticker.className = 'closed-ticker';
+    ticker.textContent = pos.ticker;
+
+    const status = document.createElement('span');
+    status.className = 'closed-status';
+    status.textContent = `${pos.status} \u00b7 ${soldQty.toLocaleString('en-US', {
+      maximumFractionDigits: 2,
+    })} sh sold`;
+
+    name.appendChild(ticker);
+    name.appendChild(status);
+
+    const change = document.createElement('span');
+    change.className = 'closed-change';
+    const sign = gainPct >= 0 ? '+' : '';
+    change.textContent = `${sign}${gainPct.toFixed(1)}% (${sign}${formatCurrency(gainUsd)})`;
+    change.classList.toggle('negative', gainPct < 0);
+
+    li.appendChild(name);
+    li.appendChild(change);
+    list.appendChild(li);
+  });
+}
+
 function attachRangeButtons() {
   const buttons = document.querySelectorAll('.range-btn');
   buttons.forEach((btn) => {
@@ -382,5 +491,6 @@ async function tick() {
 tick();
 attachChartInteractivity();
 attachRangeButtons();
+renderClosedPositions();
 
 setInterval(tick, 20000);
