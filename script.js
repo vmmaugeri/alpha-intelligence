@@ -63,7 +63,26 @@ let chartState = null;
 let lastEntryValue = null;
 let lastHistory = [];
 let lastCurrentValue = null;
+let lastSpyHistory = [];
+let lastSpyEntryPrice = null;
 let selectedRange = '1W';
+
+// Finds the SPY history point closest in time to a given timestamp — used to
+// line the benchmark line up with the portfolio line's own x-positions
+// rather than plotting two series with independently-drifting point counts.
+function nearestValue(history, targetTime) {
+  if (!history || history.length === 0) return null;
+  let best = history[0];
+  let bestDiff = Math.abs(new Date(best.t).getTime() - targetTime);
+  for (const h of history) {
+    const diff = Math.abs(new Date(h.t).getTime() - targetTime);
+    if (diff < bestDiff) {
+      best = h;
+      bestDiff = diff;
+    }
+  }
+  return best.value;
+}
 
 const RANGE_MS = {
   '24H': 24 * 60 * 60 * 1000,
@@ -106,7 +125,7 @@ function updateRangeStat() {
 
 function renderChart(hoverIndex) {
   const filtered = filterHistoryByRange(lastHistory, selectedRange);
-  drawChart(filtered, lastEntryValue, hoverIndex);
+  drawChart(filtered, lastEntryValue, hoverIndex, lastSpyHistory, lastSpyEntryPrice);
   updateRangeStat();
 }
 
@@ -133,7 +152,7 @@ function niceTicks(min, max, targetCount) {
   return ticks;
 }
 
-function drawChart(history, entryValue, hoverIndex) {
+function drawChart(history, entryValue, hoverIndex, spyHistory, spyEntryPrice) {
   const canvas = document.getElementById('chart');
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
@@ -158,15 +177,50 @@ function drawChart(history, entryValue, hoverIndex) {
   const dataMin = Math.min(...values);
   const dataMax = Math.max(...values);
 
+  // Color reflects whether the *currently visible window* is up or down —
+  // same basis as the % shown next to the range buttons — not the all-time
+  // status, so the chart always matches whatever number it's sitting next to.
+  const rangeIsPositive = history[history.length - 1].value >= history[0].value;
+  const lineColor = rangeIsPositive ? '#6E8259' : '#A14A3F';
+  const fillColorTop = rangeIsPositive ? 'rgba(110, 130, 89, 0.22)' : 'rgba(161, 74, 63, 0.18)';
+  const fillColorBottom = rangeIsPositive ? 'rgba(110, 130, 89, 0)' : 'rgba(161, 74, 63, 0)';
+
+  // Benchmark: "if this same starting capital had gone into SPY instead" —
+  // computed in dollar terms so it plots on the exact same axis as the
+  // portfolio line, using the nearest SPY reading to each portfolio
+  // timestamp so both lines share identical x-positions.
+  let benchmarkValues = null;
+  if (spyHistory && spyHistory.length > 0 && spyEntryPrice && entryValue != null) {
+    benchmarkValues = history.map((h) => {
+      const spyPrice = nearestValue(spyHistory, new Date(h.t).getTime());
+      return spyPrice != null ? entryValue * (spyPrice / spyEntryPrice) : null;
+    });
+  }
+
+  // Scale to the real data. The Aug 1 origin line only ever applies to the
+  // "All" view — folding a 2+ week old reference point into a 24H/1W/1M
+  // window defeats the point of zooming in, regardless of how close that
+  // point happens to be to the current value. Real data is always shown in
+  // full either way; only the optional origin line is view-dependent. The
+  // benchmark line is included in the scale on every view, since comparing
+  // against it is useful at any zoom level.
   const forceOrigin = selectedRange === 'All';
   let rawMin = dataMin;
   let rawMax = dataMax;
   let showOriginLine = false;
 
   if (entryValue != null && forceOrigin) {
-    rawMin = Math.min(dataMin, entryValue);
-    rawMax = Math.max(dataMax, entryValue);
+    rawMin = Math.min(rawMin, entryValue);
+    rawMax = Math.max(rawMax, entryValue);
     showOriginLine = true;
+  }
+
+  if (benchmarkValues) {
+    benchmarkValues.forEach((v) => {
+      if (v == null) return;
+      rawMin = Math.min(rawMin, v);
+      rawMax = Math.max(rawMax, v);
+    });
   }
 
   const ticks = niceTicks(rawMin, rawMax, 4);
@@ -179,7 +233,11 @@ function drawChart(history, entryValue, hoverIndex) {
   const yFor = (v) => padTop + plotH - ((v - min) / range) * plotH;
 
   const points = history.map((h, i) => [xFor(i), yFor(h.value)]);
+  const benchmarkPoints = benchmarkValues
+    ? benchmarkValues.map((v, i) => (v != null ? [xFor(i), yFor(v)] : null))
+    : null;
 
+  // Gridlines at round values, with compact $ labels
   ctx.font = '10px Raleway, sans-serif';
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'right';
@@ -195,6 +253,7 @@ function drawChart(history, entryValue, hoverIndex) {
     ctx.fillText(formatCompact(v), padLeft - 8, y);
   });
 
+  // Dashed baseline at the entry value — only when it fits the visible range
   if (entryValue != null && showOriginLine) {
     const by = yFor(entryValue);
     ctx.strokeStyle = '#C9C1AE';
@@ -207,9 +266,31 @@ function drawChart(history, entryValue, hoverIndex) {
     ctx.setLineDash([]);
   }
 
+  // Benchmark line (S&P 500) — thin, muted, no fill, drawn under the
+  // portfolio line so the portfolio stays the visually dominant series.
+  if (benchmarkPoints) {
+    ctx.strokeStyle = '#8A97A8';
+    ctx.lineWidth = 1.4;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    let started = false;
+    benchmarkPoints.forEach((p) => {
+      if (!p) return;
+      if (!started) {
+        ctx.moveTo(p[0], p[1]);
+        started = true;
+      } else {
+        ctx.lineTo(p[0], p[1]);
+      }
+    });
+    if (started) ctx.stroke();
+  }
+
+  // Soft fill under the line
   const gradient = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
-  gradient.addColorStop(0, 'rgba(110, 130, 89, 0.22)');
-  gradient.addColorStop(1, 'rgba(110, 130, 89, 0)');
+  gradient.addColorStop(0, fillColorTop);
+  gradient.addColorStop(1, fillColorBottom);
   ctx.beginPath();
   points.forEach(([x, y], i) => {
     if (i === 0) ctx.moveTo(x, y);
@@ -221,7 +302,8 @@ function drawChart(history, entryValue, hoverIndex) {
   ctx.fillStyle = gradient;
   ctx.fill();
 
-  ctx.strokeStyle = '#6E8259';
+  // Performance line
+  ctx.strokeStyle = lineColor;
   ctx.lineWidth = 2;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
@@ -232,6 +314,7 @@ function drawChart(history, entryValue, hoverIndex) {
   });
   ctx.stroke();
 
+  // Hover guide line
   if (hoverIndex != null && points[hoverIndex]) {
     const [hx] = points[hoverIndex];
     ctx.strokeStyle = 'rgba(51, 50, 46, 0.22)';
@@ -242,16 +325,18 @@ function drawChart(history, entryValue, hoverIndex) {
     ctx.stroke();
   }
 
+  // A dot at the current value, plus one at whatever's being hovered
   points.forEach(([x, y], i) => {
     const isLast = i === points.length - 1;
     const isHover = i === hoverIndex;
     if (!isLast && !isHover) return;
     ctx.beginPath();
     ctx.arc(x, y, isHover ? 5 : 4, 0, Math.PI * 2);
-    ctx.fillStyle = '#6E8259';
+    ctx.fillStyle = lineColor;
     ctx.fill();
   });
 
+  // Date labels (first / last point)
   ctx.fillStyle = '#8F8A7C';
   ctx.font = '10px Raleway, sans-serif';
   ctx.textBaseline = 'alphabetic';
@@ -284,7 +369,7 @@ function attachChartInteractivity() {
       }
     });
     const point = chartState.history[nearest];
-    drawChart(chartState.history, lastEntryValue, nearest);
+    drawChart(chartState.history, lastEntryValue, nearest, lastSpyHistory, lastSpyEntryPrice);
     tooltip.textContent = `${formatTooltipLabel(point.t)} \u2014 ${formatCurrency(point.value)}`;
     tooltip.style.left = chartState.points[nearest][0] + 'px';
     tooltip.style.top = chartState.points[nearest][1] + 'px';
@@ -293,7 +378,7 @@ function attachChartInteractivity() {
 
   canvas.addEventListener('mouseleave', () => {
     tooltip.style.opacity = '0';
-    if (chartState) drawChart(chartState.history, lastEntryValue, null);
+    if (chartState) drawChart(chartState.history, lastEntryValue, null, lastSpyHistory, lastSpyEntryPrice);
   });
 }
 
@@ -428,6 +513,27 @@ function setMover(el, position) {
   el.classList.toggle('negative', position.dayChangePct < 0);
 }
 
+// Swaps the favicon between 📈 and 📉 based on all-time direction — deliberately
+// using the stable all-time figure rather than a noisier short-term one, so it
+// doesn't flicker back and forth on minor moves between refreshes.
+function updateFavicon(isPositive) {
+  const emoji = isPositive ? '\u{1F4C8}' : '\u{1F4C9}';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">${emoji}</text></svg>`;
+  const link = document.getElementById('favicon');
+  if (link) link.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
+}
+
+// A minimal, deliberately simple sparkline: just a straight line from entry
+// to current, colored by direction. Not a full intraday history (that would
+// need its own per-ticker storage) — just a quick visual sense of direction
+// next to each position, kept as lightweight as possible.
+function sparklineSvg(isPositive) {
+  const color = isPositive ? '#6E8259' : '#A14A3F';
+  const startY = isPositive ? 12 : 4;
+  const endY = isPositive ? 4 : 12;
+  return `<svg class="pos-spark" width="24" height="16" viewBox="0 0 24 16"><polyline points="2,${startY} 22,${endY}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+}
+
 async function init() {
   const valueEl = document.getElementById('currentValue');
 
@@ -439,18 +545,34 @@ async function init() {
     valueEl.textContent = formatCurrency(data.currentValue);
 
     lastHistory = data.history || [];
+    // Use the true origin point (history[0], permanently the Aug 1 $100k
+    // anchor) for the chart's dashed baseline — not data.entryValue, which
+    // is recomputed from today's holdings and stops meaning "day one" the
+    // moment a rebalance mixes old and new entry dates.
     lastEntryValue = (lastHistory[0] && lastHistory[0].value) || data.entryValue;
     lastCurrentValue = data.currentValue;
+    lastSpyHistory = data.spyHistory || [];
+    lastSpyEntryPrice = data.spyEntryPrice || null;
     renderChart();
+    updateFavicon(data.allTimeReturnPct >= 0);
 
     const list = document.getElementById('positions');
     list.innerHTML = '';
     data.positions.forEach((p) => {
       const li = document.createElement('li');
 
-      const name = document.createElement('span');
+      const left = document.createElement('span');
+      left.className = 'pos-left';
+
+      const name = document.createElement('a');
       name.className = 'pos-name';
+      name.href = `https://finance.yahoo.com/quote/${p.ticker}`;
+      name.target = '_blank';
+      name.rel = 'noopener';
       name.textContent = p.ticker;
+
+      left.appendChild(name);
+      left.insertAdjacentHTML('beforeend', sparklineSvg(p.returnPct >= 0));
 
       const right = document.createElement('span');
       right.className = 'pos-right';
@@ -467,7 +589,7 @@ async function init() {
 
       right.appendChild(change);
       right.appendChild(weight);
-      li.appendChild(name);
+      li.appendChild(left);
       li.appendChild(right);
       list.appendChild(li);
     });
@@ -497,4 +619,7 @@ attachChartInteractivity();
 attachRangeButtons();
 renderClosedPositions();
 
+// Auto-refresh every 20s — matches the server-side cache window in
+// api/quotes.js. Well within Finnhub's free-tier rate limit (60/min;
+// this uses 8 per refresh, so ~24/min even at this pace).
 setInterval(tick, 20000);
