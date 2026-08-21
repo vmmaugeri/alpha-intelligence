@@ -70,10 +70,13 @@ let selectedRange = '1W';
 // Finds the SPY history point closest in time to a given timestamp — used to
 // line the benchmark line up with the portfolio line's own x-positions
 // rather than plotting two series with independently-drifting point counts.
-function nearestValue(history, targetTime) {
+// Returns null if the nearest point is farther away than toleranceMs, rather
+// than force-matching a distant point — that's what was causing sparse SPY
+// readings to draw as long flat plateaus connected by fake vertical steps.
+function nearestValue(history, targetTime, toleranceMs) {
   if (!history || history.length === 0) return null;
-  let best = history[0];
-  let bestDiff = Math.abs(new Date(best.t).getTime() - targetTime);
+  let best = null;
+  let bestDiff = Infinity;
   for (const h of history) {
     const diff = Math.abs(new Date(h.t).getTime() - targetTime);
     if (diff < bestDiff) {
@@ -81,6 +84,7 @@ function nearestValue(history, targetTime) {
       bestDiff = diff;
     }
   }
+  if (best == null || bestDiff > toleranceMs) return null;
   return best.value;
 }
 
@@ -139,7 +143,7 @@ function updateLegend() {
   const items = legend.querySelectorAll('.legend-item');
   const benchmarkItem = items[1];
   if (benchmarkItem) {
-    benchmarkItem.style.display = lastSpyHistory && lastSpyHistory.length >= 4 ? '' : 'none';
+    benchmarkItem.style.display = lastSpyHistory && lastSpyHistory.length >= 3 ? '' : 'none';
   }
 }
 
@@ -203,17 +207,16 @@ function drawChart(history, entryValue, hoverIndex, spyHistory, spyEntryPrice) {
 
   // Benchmark: "if this same starting capital had gone into SPY instead" —
   // computed in dollar terms so it plots on the exact same axis as the
-  // portfolio line, using the nearest SPY reading to each portfolio
-  // timestamp so both lines share identical x-positions. Requires a handful
-  // of real readings first — with only the origin point logged so far (SPY
-  // tracking is new), every timestamp would resolve to that same single
-  // point and draw as a flat, misleading line. Better to not show it yet
-  // than show something that looks broken.
-  const MIN_SPY_POINTS = 4;
+  // portfolio line, using the nearest SPY reading (within a tolerance — see
+  // nearestValue) to each portfolio timestamp so both lines share identical
+  // x-positions. Points outside that tolerance become gaps rather than
+  // getting force-matched to a distant reading.
+  const SPY_MATCH_TOLERANCE_MS = 10 * 60 * 1000; // 10 minutes — roughly matches the logging cadence
+  const MIN_SPY_POINTS = 3;
   let benchmarkValues = null;
   if (spyHistory && spyHistory.length >= MIN_SPY_POINTS && spyEntryPrice && entryValue != null) {
     benchmarkValues = history.map((h) => {
-      const spyPrice = nearestValue(spyHistory, new Date(h.t).getTime());
+      const spyPrice = nearestValue(spyHistory, new Date(h.t).getTime(), SPY_MATCH_TOLERANCE_MS);
       return spyPrice != null ? entryValue * (spyPrice / spyEntryPrice) : null;
     });
   }
@@ -289,6 +292,9 @@ function drawChart(history, entryValue, hoverIndex, spyHistory, spyEntryPrice) {
 
   // Benchmark line (S&P 500) — thin, muted, no fill, drawn under the
   // portfolio line so the portfolio stays the visually dominant series.
+  // Drawn as separate segments across any gap (see nearestValue's tolerance)
+  // rather than one continuous path — connecting straight across a gap is
+  // exactly what was producing the fake flat plateaus and vertical steps.
   if (benchmarkPoints) {
     ctx.strokeStyle = '#8A97A8';
     ctx.lineWidth = 1.4;
@@ -297,7 +303,10 @@ function drawChart(history, entryValue, hoverIndex, spyHistory, spyEntryPrice) {
     ctx.beginPath();
     let started = false;
     benchmarkPoints.forEach((p) => {
-      if (!p) return;
+      if (!p) {
+        started = false; // gap — next point starts a fresh segment, doesn't connect back
+        return;
+      }
       if (!started) {
         ctx.moveTo(p[0], p[1]);
         started = true;
@@ -305,7 +314,7 @@ function drawChart(history, entryValue, hoverIndex, spyHistory, spyEntryPrice) {
         ctx.lineTo(p[0], p[1]);
       }
     });
-    if (started) ctx.stroke();
+    ctx.stroke();
   }
 
   // Soft fill under the line
