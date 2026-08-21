@@ -127,8 +127,24 @@ function renderChart(hoverIndex) {
   const filtered = filterHistoryByRange(lastHistory, selectedRange);
   drawChart(filtered, lastEntryValue, hoverIndex, lastSpyHistory, lastSpyEntryPrice);
   updateRangeStat();
+  updateLegend();
 }
 
+// Keeps the "S&P 500" legend item in sync with whether the benchmark line
+// is actually being drawn (see MIN_SPY_POINTS in drawChart) — otherwise the
+// legend would reference a line that isn't there yet.
+function updateLegend() {
+  const legend = document.getElementById('chartLegend');
+  if (!legend) return;
+  const items = legend.querySelectorAll('.legend-item');
+  const benchmarkItem = items[1];
+  if (benchmarkItem) {
+    benchmarkItem.style.display = lastSpyHistory && lastSpyHistory.length >= 4 ? '' : 'none';
+  }
+}
+
+// Picks clean, round gridline values (e.g. 100k / 105k / 110k) rather than
+// arbitrary fractions of the data range — standard "nice ticks" approach.
 function niceTicks(min, max, targetCount) {
   if (min === max) {
     min -= 1;
@@ -188,9 +204,14 @@ function drawChart(history, entryValue, hoverIndex, spyHistory, spyEntryPrice) {
   // Benchmark: "if this same starting capital had gone into SPY instead" —
   // computed in dollar terms so it plots on the exact same axis as the
   // portfolio line, using the nearest SPY reading to each portfolio
-  // timestamp so both lines share identical x-positions.
+  // timestamp so both lines share identical x-positions. Requires a handful
+  // of real readings first — with only the origin point logged so far (SPY
+  // tracking is new), every timestamp would resolve to that same single
+  // point and draw as a flat, misleading line. Better to not show it yet
+  // than show something that looks broken.
+  const MIN_SPY_POINTS = 4;
   let benchmarkValues = null;
-  if (spyHistory && spyHistory.length > 0 && spyEntryPrice && entryValue != null) {
+  if (spyHistory && spyHistory.length >= MIN_SPY_POINTS && spyEntryPrice && entryValue != null) {
     benchmarkValues = history.map((h) => {
       const spyPrice = nearestValue(spyHistory, new Date(h.t).getTime());
       return spyPrice != null ? entryValue * (spyPrice / spyEntryPrice) : null;
@@ -523,17 +544,6 @@ function updateFavicon(isPositive) {
   if (link) link.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
 }
 
-// A minimal, deliberately simple sparkline: just a straight line from entry
-// to current, colored by direction. Not a full intraday history (that would
-// need its own per-ticker storage) — just a quick visual sense of direction
-// next to each position, kept as lightweight as possible.
-function sparklineSvg(isPositive) {
-  const color = isPositive ? '#6E8259' : '#A14A3F';
-  const startY = isPositive ? 12 : 4;
-  const endY = isPositive ? 4 : 12;
-  return `<svg class="pos-spark" width="24" height="16" viewBox="0 0 24 16"><polyline points="2,${startY} 22,${endY}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/></svg>`;
-}
-
 async function init() {
   const valueEl = document.getElementById('currentValue');
 
@@ -561,18 +571,12 @@ async function init() {
     data.positions.forEach((p) => {
       const li = document.createElement('li');
 
-      const left = document.createElement('span');
-      left.className = 'pos-left';
-
       const name = document.createElement('a');
       name.className = 'pos-name';
       name.href = `https://finance.yahoo.com/quote/${p.ticker}`;
       name.target = '_blank';
       name.rel = 'noopener';
       name.textContent = p.ticker;
-
-      left.appendChild(name);
-      left.insertAdjacentHTML('beforeend', sparklineSvg(p.returnPct >= 0));
 
       const right = document.createElement('span');
       right.className = 'pos-right';
@@ -589,7 +593,7 @@ async function init() {
 
       right.appendChild(change);
       right.appendChild(weight);
-      li.appendChild(left);
+      li.appendChild(name);
       li.appendChild(right);
       list.appendChild(li);
     });
