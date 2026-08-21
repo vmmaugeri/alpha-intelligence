@@ -1,3 +1,10 @@
+// Vercel serverless function: /api/cron-update
+// Called by an external scheduler (cron-job.org) on a fixed schedule (e.g.
+// every 5 minutes) to log a portfolio value point to the shared history —
+// independent of whether anyone actually has the page open. Vercel's own
+// Hobby-plan cron is capped at once/day, so this uses a free external
+// pinger instead; this route is a normal HTTP endpoint either way.
+
 const POSITIONS = [
   { ticker: 'SILC', quantity: 125.64, entryPrice: 49.99  },
   { ticker: 'BRUN', quantity: 694.14, entryPrice: 20.21  },
@@ -14,8 +21,16 @@ const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 const HISTORY_KEY = 'alpha-intelligence-history-v2';
 const MAX_HISTORY_POINTS = 5000;
-const MAX_PLAUSIBLE_SWING = 0.08;
+const MAX_PLAUSIBLE_SWING = 0.08; // same sanity guard as api/quotes.js
 
+// Same benchmark constants as api/quotes.js — see that file for how
+// SPY_ENTRY_PRICE was derived.
+const SPY_ENTRY_PRICE = 754.30;
+const SPY_HISTORY_KEY = 'alpha-intelligence-spy-v1';
+
+// Same check as api/quotes.js — skip logging while the market's closed,
+// since Finnhub just echoes the last close price overnight/weekends and
+// that would otherwise fill the chart with long flat runs.
 function isMarketOpenNow() {
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
@@ -52,7 +67,26 @@ async function upstashPostPath(path, body) {
   return data.result;
 }
 
+// Logs one point for the given key, subject to the same plausibility guard
+// used everywhere else. Returns whether it actually logged (vs skipped).
+async function logPoint(key, currentValue) {
+  const rawLast = await upstashGetPath(`/lrange/${encodeURIComponent(key)}/-1/-1`);
+  const last = Array.isArray(rawLast) && rawLast.length > 0 ? JSON.parse(rawLast[0]) : null;
+  const isPlausible = !last || Math.abs(currentValue - last.value) / last.value <= MAX_PLAUSIBLE_SWING;
+
+  if (!isPlausible) return false;
+
+  const point = { t: new Date().toISOString(), value: currentValue };
+  await upstashPostPath(`/rpush/${encodeURIComponent(key)}`, JSON.stringify(point));
+  await upstashGetPath(`/ltrim/${encodeURIComponent(key)}/-${MAX_HISTORY_POINTS}/-1`);
+  return true;
+}
+
 module.exports = async (req, res) => {
+  // Optional shared-secret check — only enforced if CRON_SECRET is set, so
+  // this works immediately without requiring extra setup, but can be locked
+  // down by adding that env var and putting the same value in the scheduler's
+  // URL as ?secret=...
   const secret = process.env.CRON_SECRET;
   if (secret && req.query.secret !== secret) {
     res.status(401).json({ error: 'Unauthorized' });
@@ -77,25 +111,28 @@ module.exports = async (req, res) => {
 
     const currentValue = POSITIONS.reduce((sum, p, i) => sum + p.quantity * prices[i], 0);
 
-    const rawLast = await upstashGetPath(`/lrange/${encodeURIComponent(HISTORY_KEY)}/-1/-1`);
-    const last = Array.isArray(rawLast) && rawLast.length > 0 ? JSON.parse(rawLast[0]) : null;
-    const isPlausible = !last || Math.abs(currentValue - last.value) / last.value <= MAX_PLAUSIBLE_SWING;
+    // SPY fetch is best-effort — if it fails, we just skip logging the
+    // benchmark this tick rather than failing the whole request.
+    let spyPrice = null;
+    try {
+      const spyRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=SPY&token=${apiKey}`);
+      if (spyRes.ok) {
+        const spyData = await spyRes.json();
+        spyPrice = spyData && spyData.c ? spyData.c : null;
+      }
+    } catch {
+      spyPrice = null;
+    }
 
     if (!isMarketOpenNow()) {
       res.status(200).json({ ok: true, skipped: 'market closed, not logged' });
       return;
     }
 
-    if (!isPlausible) {
-      res.status(200).json({ ok: true, skipped: 'implausible swing, not logged' });
-      return;
-    }
+    const loggedPortfolio = await logPoint(HISTORY_KEY, currentValue);
+    const loggedSpy = spyPrice != null ? await logPoint(SPY_HISTORY_KEY, spyPrice) : false;
 
-    const point = { t: new Date().toISOString(), value: currentValue };
-    await upstashPostPath(`/rpush/${encodeURIComponent(HISTORY_KEY)}`, JSON.stringify(point));
-    await upstashGetPath(`/ltrim/${encodeURIComponent(HISTORY_KEY)}/-${MAX_HISTORY_POINTS}/-1`);
-
-    res.status(200).json({ ok: true, point });
+    res.status(200).json({ ok: true, loggedPortfolio, loggedSpy });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
