@@ -55,7 +55,7 @@ function updateMarketStatus() {
   const dot = document.getElementById('statusDot');
   if (!text) return;
   const open = isMarketOpen();
-  text.textContent = open ? 'NYSE open' : 'NYSE closed';
+  text.textContent = open ? 'Market open' : 'Market closed';
   if (dot) dot.classList.toggle('open', open);
 }
 
