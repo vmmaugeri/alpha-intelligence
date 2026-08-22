@@ -5,7 +5,6 @@
   --accent: #6E8259;
   --negative: #A14A3F;
   --hairline: #E6E1D4;
-  --benchmark: #8A97A8;
 }
 
 * { box-sizing: border-box; }
@@ -171,33 +170,11 @@ h1 {
   transition: opacity 0.15s ease;
 }
 
-.chart-legend {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 8px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 5px;
+.chart-disclaimer {
   font-size: 10.5px;
+  line-height: 1.5;
   color: var(--muted);
-}
-
-.legend-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.legend-dot--portfolio {
-  background: var(--accent);
-}
-
-.legend-dot--benchmark {
-  background: var(--benchmark);
+  margin: 0 0 8px;
 }
 
 .positions-wrap {
