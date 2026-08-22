@@ -26,6 +26,12 @@ const MIN_INTERVAL_MS = 55 * 1000;
 const MAX_PLAUSIBLE_SWING = 0.08;
 const ORIGIN_TIMESTAMP = '2026-08-01T00:00:00Z';
 
+// The chart is deliberately cut to start here rather than at the true Aug 1
+// origin — see the on-page disclaimer, which explains the portfolio's real
+// starting value was $100,000 on Aug 1 despite the chart not visibly
+// starting there.
+const DISPLAY_START_TIMESTAMP = '2026-08-12T19:45:00Z'; // Aug 12, 3:45pm ET
+
 const TRUE_ORIGIN_VALUE = 100003.31;
 
 const PORTFOLIO_HISTORICAL_CLOSES = [
@@ -45,27 +51,6 @@ const PORTFOLIO_HISTORICAL_CLOSES = [
   { t: '2026-08-19T20:00:00Z', value: 117682.47 },
   { t: '2026-08-20T20:00:00Z', value: 117974.20 },
   { t: '2026-08-21T20:00:00Z', value: 117175.20 },
-];
-
-const SPY_ENTRY_PRICE = 747.03;
-const SPY_HISTORY_KEY = 'alpha-intelligence-spy-v2';
-
-const SPY_HISTORICAL_CLOSES = [
-  { t: '2026-08-01T00:00:00Z', value: 747.03 },
-  { t: '2026-08-03T20:00:00Z', value: 757.67 },
-  { t: '2026-08-04T20:00:00Z', value: 771.33 },
-  { t: '2026-08-05T20:00:00Z', value: 769.79 },
-  { t: '2026-08-06T20:00:00Z', value: 768.56 },
-  { t: '2026-08-07T20:00:00Z', value: 773.26 },
-  { t: '2026-08-10T20:00:00Z', value: 773.03 },
-  { t: '2026-08-11T20:00:00Z', value: 770.56 },
-  { t: '2026-08-12T20:00:00Z', value: 772.49 },
-  { t: '2026-08-13T20:00:00Z', value: 777.88 },
-  { t: '2026-08-14T20:00:00Z', value: 776.34 },
-  { t: '2026-08-17T20:00:00Z', value: 772.67 },
-  { t: '2026-08-18T20:00:00Z', value: 767.45 },
-  { t: '2026-08-19T20:00:00Z', value: 769.06 },
-  { t: '2026-08-20T20:00:00Z', value: 762.60 },
 ];
 
 function isMarketOpenNow() {
@@ -193,24 +178,13 @@ module.exports = async (req, res) => {
     const currentValue = quotes.reduce((sum, p) => sum + p.quantity * p.currentPrice, 0);
     const allTimeReturnPct = ((currentValue - ENTRY_VALUE) / ENTRY_VALUE) * 100;
 
-    let spyPrice = null;
-    try {
-      const spyRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=SPY&token=${apiKey}`);
-      if (spyRes.ok) {
-        const spyData = await spyRes.json();
-        spyPrice = spyData && spyData.c ? spyData.c : null;
-      }
-    } catch {
-      spyPrice = null;
-    }
-
     let history = await readAndUpdateHistory(HISTORY_KEY, TRUE_ORIGIN_VALUE, ORIGIN_TIMESTAMP, currentValue, PORTFOLIO_HISTORICAL_CLOSES);
     const recovered = await readRawHistory(RECOVERY_KEY);
     history = mergeRecovered(history, recovered);
 
-    const spyHistory = spyPrice != null
-      ? await readAndUpdateHistory(SPY_HISTORY_KEY, SPY_ENTRY_PRICE, ORIGIN_TIMESTAMP, spyPrice, SPY_HISTORICAL_CLOSES)
-      : [];
+    // Cut the displayed history to start at DISPLAY_START_TIMESTAMP.
+    const displayStartTime = new Date(DISPLAY_START_TIMESTAMP).getTime();
+    history = history.filter((p) => new Date(p.t).getTime() >= displayStartTime);
 
     const positions = quotes
       .map((p) => ({
@@ -228,11 +202,10 @@ module.exports = async (req, res) => {
     res.status(200).json({
       currentValue,
       entryValue: ENTRY_VALUE,
+      trueOriginValue: TRUE_ORIGIN_VALUE,
       allTimeReturnPct,
       positions,
       history,
-      spyHistory,
-      spyEntryPrice: SPY_ENTRY_PRICE,
       updatedAt: new Date().toISOString(),
     });
   } catch (err) {
