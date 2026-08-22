@@ -18,40 +18,11 @@ const ENTRY_VALUE = POSITIONS.reduce((sum, p) => sum + p.quantity * p.entryPrice
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
-const HISTORY_KEY = 'alpha-intelligence-history-v3'; // bumped from v2 — that key had real flat/stale runs baked in from before the market-hours and race-condition fixes; this key gets a correct real backfill instead (see below)
+const HISTORY_KEY = 'alpha-intelligence-history-v2';
 const MAX_HISTORY_POINTS = 5000;
 const MIN_INTERVAL_MS = 55 * 1000;
 const MAX_PLAUSIBLE_SWING = 0.08;
 const ORIGIN_TIMESTAMP = '2026-08-01T00:00:00Z';
-
-// The true portfolio value on day one, computed from the *original* 8-position
-// holdings (before any rebalancing) — fixed independently of ENTRY_VALUE above,
-// which reflects today's holdings and changes every time the portfolio rebalances.
-const TRUE_ORIGIN_VALUE = 100003.31;
-
-// Real daily portfolio totals for Aug 3–13 2026, computed from the original
-// 8-position holdings' actual quantities and real historical closing prices
-// (source: stockanalysis.com/Tiingo for MU/NBIS/MRVL/LITE/IREN/AXTI/DRAM,
-// marketbeat.com for BRUN) — replaces the flat/stale stretch that was baked
-// into the old history key from before the market-hours and race-condition
-// fixes. Backfill deliberately stops at Aug 13: Aug 14 and Aug 15 were both
-// rebalance days into different holdings entirely, and reconstructing that
-// stretch accurately would need real historical data for seven more tickers
-// across two overlapping windows — rather than approximate that, live
-// tracking simply resumes from today, connecting Aug 13 directly to today's
-// first real point instead of asserting invented values in between.
-const PORTFOLIO_HISTORICAL_CLOSES = [
-  { t: '2026-08-01T00:00:00Z', value: 100003.31 },
-  { t: '2026-08-03T20:00:00Z', value: 109333.05 },
-  { t: '2026-08-04T20:00:00Z', value: 116158.31 },
-  { t: '2026-08-05T20:00:00Z', value: 112848.92 },
-  { t: '2026-08-06T20:00:00Z', value: 108925.21 },
-  { t: '2026-08-07T20:00:00Z', value: 113820.80 },
-  { t: '2026-08-10T20:00:00Z', value: 107356.39 },
-  { t: '2026-08-11T20:00:00Z', value: 109910.23 },
-  { t: '2026-08-12T20:00:00Z', value: 123180.61 },
-  { t: '2026-08-13T20:00:00Z', value: 124123.28 },
-];
 
 // --- S&P 500 benchmark (tracked via SPY, the ETF) ---
 // $747.03 is SPY's real, confirmed close for Fri Jul 31 2026 (source:
@@ -60,10 +31,16 @@ const PORTFOLIO_HISTORICAL_CLOSES = [
 // estimate ($754.30) that turned out to be off; this replaces it with the
 // actual number.
 const SPY_ENTRY_PRICE = 747.03;
-const SPY_HISTORY_KEY = 'alpha-intelligence-spy-v2';
+const SPY_HISTORY_KEY = 'alpha-intelligence-spy-v2'; // bumped from v1 — that key had the wrong entry price baked into its seed
 
+// Real daily closes for SPY, Jul 31 – Aug 20 2026 (source: stockanalysis.com,
+// data via Tiingo) — backfilled once, the first time SPY_HISTORY_KEY is
+// found empty, so the benchmark line has real history from day one instead
+// of only whatever's been logged live since this feature shipped. Each
+// timestamp is that day's ~4pm ET close (20:00 UTC); Aug 21 onward comes
+// from live Finnhub ticks the normal way.
 const SPY_HISTORICAL_CLOSES = [
-  { t: '2026-08-01T00:00:00Z', value: 747.03 },
+  { t: '2026-08-01T00:00:00Z', value: 747.03 }, // Jul 31 close — matches the portfolio's own origin timestamp
   { t: '2026-08-03T20:00:00Z', value: 757.67 },
   { t: '2026-08-04T20:00:00Z', value: 771.33 },
   { t: '2026-08-05T20:00:00Z', value: 769.79 },
@@ -198,7 +175,7 @@ module.exports = async (req, res) => {
       spyPrice = null;
     }
 
-    const history = await readAndUpdateHistory(HISTORY_KEY, TRUE_ORIGIN_VALUE, ORIGIN_TIMESTAMP, currentValue, PORTFOLIO_HISTORICAL_CLOSES);
+    const history = await readAndUpdateHistory(HISTORY_KEY, ENTRY_VALUE, ORIGIN_TIMESTAMP, currentValue);
     const spyHistory = spyPrice != null
       ? await readAndUpdateHistory(SPY_HISTORY_KEY, SPY_ENTRY_PRICE, ORIGIN_TIMESTAMP, spyPrice, SPY_HISTORICAL_CLOSES)
       : [];
