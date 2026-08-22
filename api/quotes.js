@@ -14,43 +14,49 @@ const POSITIONS = [
   { ticker: 'LITE', name: 'Lumentum Holdings',     quantity: 11.19,  entryPrice: 687.06 },
 ];
 
-// Current cost basis across today's holdings — used for per-position weight%
-// only. NOT used as the chart's baseline/reference anymore (see script.js) —
-// a rebalance mixes old and new entry dates, so this number stops meaning
-// "day one" the moment holdings change. The true Aug 1 $100k origin lives
-// permanently as history[0] in Upstash instead, untouched by rebalancing.
 const ENTRY_VALUE = POSITIONS.reduce((sum, p) => sum + p.quantity * p.entryPrice, 0);
 
-// --- Shared history, stored in Upstash Redis (not per-visitor localStorage) ---
-// This is what makes the chart identical for every visitor: everyone reads and
-// appends to the same record instead of each browser keeping its own copy.
-//
-// Stored as a Redis LIST (via RPUSH) rather than a single JSON blob (via GET/SET).
-// A GET-modify-SET cycle isn't safe when more than one request can happen close
-// together — two requests can both read the same starting point and then one
-// silently overwrites the other's save. RPUSH is atomic: concurrent pushes can
-// never stomp on each other, no matter how many happen at once.
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 const HISTORY_KEY = 'alpha-intelligence-history-v2';
 const MAX_HISTORY_POINTS = 5000;
-const MIN_INTERVAL_MS = 55 * 1000; // don't log a new point more than ~once/min, even under heavy traffic
-const MAX_PLAUSIBLE_SWING = 0.08; // reject a point implying an >8% move in under a minute — almost certainly bad data, not a real swing
-const ORIGIN_TIMESTAMP = '2026-08-01T00:00:00Z'; // matches the page's stated start date
+const MIN_INTERVAL_MS = 55 * 1000;
+const MAX_PLAUSIBLE_SWING = 0.08;
+const ORIGIN_TIMESTAMP = '2026-08-01T00:00:00Z';
 
 // --- S&P 500 benchmark (tracked via SPY, the ETF) ---
-// $754.30 is SPY's derived close for Fri Jul 31 2026: SPY's actual Jul 30
-// close ($741.69) carried forward by the S&P 500 index's own +1.7% move on
-// Jul 31 — not a guess, just the same day's index return applied to SPY's
-// last confirmed price, since SPY tracks the index closely.
-const SPY_ENTRY_PRICE = 754.30;
-const SPY_HISTORY_KEY = 'alpha-intelligence-spy-v1';
+// $747.03 is SPY's real, confirmed close for Fri Jul 31 2026 (source:
+// stockanalysis.com/Tiingo) — matches the entry date used for the
+// portfolio's own origin. An earlier version of this file had a derived
+// estimate ($754.30) that turned out to be off; this replaces it with the
+// actual number.
+const SPY_ENTRY_PRICE = 747.03;
+const SPY_HISTORY_KEY = 'alpha-intelligence-spy-v2'; // bumped from v1 — that key had the wrong entry price baked into its seed
 
-// Checks real NYSE hours in America/New_York — used to skip logging new
-// history points while the market's closed. Finnhub just echoes the last
-// close price overnight/weekends, so without this the chart fills up with
-// long runs of identical flat points instead of jumping cleanly from one
-// session's close to the next session's open.
+// Real daily closes for SPY, Jul 31 – Aug 20 2026 (source: stockanalysis.com,
+// data via Tiingo) — backfilled once, the first time SPY_HISTORY_KEY is
+// found empty, so the benchmark line has real history from day one instead
+// of only whatever's been logged live since this feature shipped. Each
+// timestamp is that day's ~4pm ET close (20:00 UTC); Aug 21 onward comes
+// from live Finnhub ticks the normal way.
+const SPY_HISTORICAL_CLOSES = [
+  { t: '2026-08-01T00:00:00Z', value: 747.03 }, // Jul 31 close — matches the portfolio's own origin timestamp
+  { t: '2026-08-03T20:00:00Z', value: 757.67 },
+  { t: '2026-08-04T20:00:00Z', value: 771.33 },
+  { t: '2026-08-05T20:00:00Z', value: 769.79 },
+  { t: '2026-08-06T20:00:00Z', value: 768.56 },
+  { t: '2026-08-07T20:00:00Z', value: 773.26 },
+  { t: '2026-08-10T20:00:00Z', value: 773.03 },
+  { t: '2026-08-11T20:00:00Z', value: 770.56 },
+  { t: '2026-08-12T20:00:00Z', value: 772.49 },
+  { t: '2026-08-13T20:00:00Z', value: 777.88 },
+  { t: '2026-08-14T20:00:00Z', value: 776.34 },
+  { t: '2026-08-17T20:00:00Z', value: 772.67 },
+  { t: '2026-08-18T20:00:00Z', value: 767.45 },
+  { t: '2026-08-19T20:00:00Z', value: 769.06 },
+  { t: '2026-08-20T20:00:00Z', value: 762.60 },
+];
+
 function isMarketOpenNow() {
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
@@ -87,8 +93,8 @@ async function upstashPostPath(path, body) {
   return data.result;
 }
 
-async function readAndUpdateHistory(key, entryValue, originTimestamp, currentValue) {
-  if (!UPSTASH_URL || !UPSTASH_TOKEN) return []; // not configured yet — chart just stays empty
+async function readAndUpdateHistory(key, entryValue, originTimestamp, currentValue, backfillPoints) {
+  if (!UPSTASH_URL || !UPSTASH_TOKEN) return [];
 
   let history = [];
   try {
@@ -98,18 +104,17 @@ async function readAndUpdateHistory(key, entryValue, originTimestamp, currentVal
     history = [];
   }
 
-  // Seed the origin point if it's missing — checks whether the *first*
-  // recorded point is already at-or-before the entry date, rather than just
-  // checking for an empty list, since a key created after the portfolio
-  // started can already have later data in it without ever having the true
-  // starting anchor. Inserted at the front (LPUSH) so it doesn't disturb
-  // whatever's already been recorded.
   const originTime = new Date(originTimestamp).getTime();
   const hasOrigin = history.length > 0 && new Date(history[0].t).getTime() <= originTime;
   if (!hasOrigin) {
-    const originPoint = { t: originTimestamp, value: entryValue };
-    await upstashPostPath(`/lpush/${encodeURIComponent(key)}`, JSON.stringify(originPoint));
-    history.unshift(originPoint);
+    const pointsToSeed =
+      backfillPoints && backfillPoints.length > 0
+        ? backfillPoints
+        : [{ t: originTimestamp, value: entryValue }];
+    for (let i = pointsToSeed.length - 1; i >= 0; i--) {
+      await upstashPostPath(`/lpush/${encodeURIComponent(key)}`, JSON.stringify(pointsToSeed[i]));
+    }
+    history = [...pointsToSeed, ...history];
   }
 
   const last = history[history.length - 1];
@@ -117,10 +122,6 @@ async function readAndUpdateHistory(key, entryValue, originTimestamp, currentVal
   const msSinceLast = last ? now - new Date(last.t).getTime() : Infinity;
   const dueForNewPoint = !last || msSinceLast >= MIN_INTERVAL_MS;
 
-  // Only apply the swing-sanity check against a *recent* point (last few
-  // minutes) — a bigger gap since the last point (like right after the
-  // seeded Aug 1 origin, or after the page hasn't been checked in a while)
-  // can easily span real market movement, not just bad data.
   const RECENT_WINDOW_MS = 5 * 60 * 1000;
   const isPlausible =
     !last ||
@@ -155,7 +156,6 @@ module.exports = async (req, res) => {
           throw new Error(`Finnhub request failed for ${p.ticker}: ${r.status}`);
         }
         const data = await r.json();
-        // Finnhub returns c=0 for unknown symbols rather than an error — guard against that.
         const currentPrice = data && data.c ? data.c : p.entryPrice;
         return { ...p, currentPrice, changePct: data ? data.dp : 0 };
       })
@@ -164,9 +164,6 @@ module.exports = async (req, res) => {
     const currentValue = quotes.reduce((sum, p) => sum + p.quantity * p.currentPrice, 0);
     const allTimeReturnPct = ((currentValue - ENTRY_VALUE) / ENTRY_VALUE) * 100;
 
-    // SPY fetch is best-effort — if it fails, the benchmark line just won't
-    // show rather than breaking the whole page (the portfolio itself never
-    // depends on this succeeding).
     let spyPrice = null;
     try {
       const spyRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=SPY&token=${apiKey}`);
@@ -180,7 +177,7 @@ module.exports = async (req, res) => {
 
     const history = await readAndUpdateHistory(HISTORY_KEY, ENTRY_VALUE, ORIGIN_TIMESTAMP, currentValue);
     const spyHistory = spyPrice != null
-      ? await readAndUpdateHistory(SPY_HISTORY_KEY, SPY_ENTRY_PRICE, ORIGIN_TIMESTAMP, spyPrice)
+      ? await readAndUpdateHistory(SPY_HISTORY_KEY, SPY_ENTRY_PRICE, ORIGIN_TIMESTAMP, spyPrice, SPY_HISTORICAL_CLOSES)
       : [];
 
     const positions = quotes
@@ -190,8 +187,8 @@ module.exports = async (req, res) => {
         weight: ((p.quantity * p.entryPrice) / ENTRY_VALUE) * 100,
         currentPrice: p.currentPrice,
         entryPrice: p.entryPrice,
-        dayChangePct: p.changePct, // Finnhub's intraday change (prev close -> now)
-        returnPct: ((p.currentPrice - p.entryPrice) / p.entryPrice) * 100, // since your entry
+        dayChangePct: p.changePct,
+        returnPct: ((p.currentPrice - p.entryPrice) / p.entryPrice) * 100,
       }))
       .sort((a, b) => b.weight - a.weight);
 
