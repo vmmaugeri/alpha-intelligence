@@ -19,12 +19,9 @@ const POSITIONS = [
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
-const HISTORY_KEY = 'alpha-intelligence-history-v6'; // bumped from v5 — see api/quotes.js for why (v2 turned out to have the real intraday data all along; this is the new key that new live ticks accumulate into going forward, merged with v2's frozen real history at read time)
+const HISTORY_KEY = 'alpha-intelligence-history-v6';
 const MAX_HISTORY_POINTS = 5000;
 const MAX_PLAUSIBLE_SWING = 0.08;
-
-const SPY_ENTRY_PRICE = 747.03;
-const SPY_HISTORY_KEY = 'alpha-intelligence-spy-v2';
 
 function isMarketOpenNow() {
   const fmt = new Intl.DateTimeFormat('en-US', {
@@ -100,26 +97,14 @@ module.exports = async (req, res) => {
 
     const currentValue = POSITIONS.reduce((sum, p, i) => sum + p.quantity * prices[i], 0);
 
-    let spyPrice = null;
-    try {
-      const spyRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=SPY&token=${apiKey}`);
-      if (spyRes.ok) {
-        const spyData = await spyRes.json();
-        spyPrice = spyData && spyData.c ? spyData.c : null;
-      }
-    } catch {
-      spyPrice = null;
-    }
-
     if (!isMarketOpenNow()) {
       res.status(200).json({ ok: true, skipped: 'market closed, not logged' });
       return;
     }
 
-    const loggedPortfolio = await logPoint(HISTORY_KEY, currentValue);
-    const loggedSpy = spyPrice != null ? await logPoint(SPY_HISTORY_KEY, spyPrice) : false;
+    const logged = await logPoint(HISTORY_KEY, currentValue);
 
-    res.status(200).json({ ok: true, loggedPortfolio, loggedSpy });
+    res.status(200).json({ ok: true, logged });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
