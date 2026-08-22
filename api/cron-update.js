@@ -19,15 +19,10 @@ const POSITIONS = [
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
-const HISTORY_KEY = 'alpha-intelligence-history-v5'; // bumped from v4 — see api/quotes.js for why
+const HISTORY_KEY = 'alpha-intelligence-history-v6'; // bumped from v5 — see api/quotes.js for why (v2 turned out to have the real intraday data all along; this is the new key that new live ticks accumulate into going forward, merged with v2's frozen real history at read time)
 const MAX_HISTORY_POINTS = 5000;
 const MAX_PLAUSIBLE_SWING = 0.08;
 
-// Same benchmark constants as api/quotes.js — see that file for the source
-// of SPY_ENTRY_PRICE and the full historical backfill. This file doesn't
-// need the backfill array itself (only quotes.js seeds it, via page loads);
-// it just needs to point at the same key so both files' writes land in the
-// same shared list.
 const SPY_ENTRY_PRICE = 747.03;
 const SPY_HISTORY_KEY = 'alpha-intelligence-spy-v2';
 
