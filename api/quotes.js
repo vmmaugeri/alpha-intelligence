@@ -18,8 +18,9 @@ const ENTRY_VALUE = POSITIONS.reduce((sum, p) => sum + p.quantity * p.entryPrice
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
-const HISTORY_KEY = 'alpha-intelligence-history-v5'; // bumped from v4 — v4 discarded v3's real accumulated intraday data entirely in favor of the hand-researched daily backfill alone. This key recovers that real data instead (see RECOVERY_KEY below and the recoveryKey logic in readAndUpdateHistory) rather than throwing it away a second time.
-const RECOVERY_KEY = 'alpha-intelligence-history-v3'; // v3 was never deleted, just stopped being read — its real logged data (if any is still genuinely usable) gets recovered and merged with the backfill on first seed
+
+const HISTORY_KEY = 'alpha-intelligence-history-v6';
+const RECOVERY_KEY = 'alpha-intelligence-history-v2';
 const MAX_HISTORY_POINTS = 5000;
 const MIN_INTERVAL_MS = 55 * 1000;
 const MAX_PLAUSIBLE_SWING = 0.08;
@@ -46,7 +47,6 @@ const PORTFOLIO_HISTORICAL_CLOSES = [
   { t: '2026-08-21T20:00:00Z', value: 117175.20 },
 ];
 
-// --- S&P 500 benchmark (tracked via SPY, the ETF) ---
 const SPY_ENTRY_PRICE = 747.03;
 const SPY_HISTORY_KEY = 'alpha-intelligence-spy-v2';
 
@@ -84,38 +84,6 @@ function isMarketOpenNow() {
   return minutesNow >= 9 * 60 + 30 && minutesNow < 16 * 60;
 }
 
-// Same check as isMarketOpenNow, but for an arbitrary stored timestamp
-// rather than right now — used to find real data worth recovering from an
-// old history key.
-function wasOffHours(isoString) {
-  const fmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    weekday: 'short',
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: false,
-  });
-  const parts = fmt.formatToParts(new Date(isoString));
-  const map = {};
-  parts.forEach((p) => (map[p.type] = p.value));
-  if (map.weekday === 'Sat' || map.weekday === 'Sun') return true;
-  const minutesOfDay = parseInt(map.hour, 10) * 60 + parseInt(map.minute, 10);
-  return minutesOfDay < 9 * 60 + 30 || minutesOfDay >= 16 * 60;
-}
-
-// A point logged outside real market hours could only have come from the
-// OLD code, before the market-hours-gating fix existed — the current code
-// physically can't produce one. Scanning for the LAST such violation finds
-// exactly where the old, contaminated logging stops and genuine live
-// tracking begins; everything after that point is real and worth keeping.
-function findGoodDataBoundary(history) {
-  let lastBadIndex = -1;
-  for (let i = 0; i < history.length; i++) {
-    if (wasOffHours(history[i].t)) lastBadIndex = i;
-  }
-  return lastBadIndex + 1;
-}
-
 async function upstashGetPath(path) {
   const r = await fetch(`${UPSTASH_URL}${path}`, {
     headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` },
@@ -145,7 +113,7 @@ async function readRawHistory(key) {
   }
 }
 
-async function readAndUpdateHistory(key, entryValue, originTimestamp, currentValue, backfillPoints, recoveryKey) {
+async function readAndUpdateHistory(key, entryValue, originTimestamp, currentValue, backfillPoints) {
   if (!UPSTASH_URL || !UPSTASH_TOKEN) return [];
 
   let history = [];
@@ -159,27 +127,10 @@ async function readAndUpdateHistory(key, entryValue, originTimestamp, currentVal
   const originTime = new Date(originTimestamp).getTime();
   const hasOrigin = history.length > 0 && new Date(history[0].t).getTime() <= originTime;
   if (!hasOrigin) {
-    let pointsToSeed =
+    const pointsToSeed =
       backfillPoints && backfillPoints.length > 0
         ? backfillPoints
         : [{ t: originTimestamp, value: entryValue }];
-
-    // If an old key is given, check it for real live-logged data that's
-    // still genuinely usable, rather than only ever falling back to the
-    // hand-researched daily backfill — a previous migration discarded real
-    // accumulated intraday data outright instead of recovering it, which
-    // is exactly the mistake this avoids repeating.
-    if (recoveryKey) {
-      const oldHistory = await readRawHistory(recoveryKey);
-      const boundaryIdx = findGoodDataBoundary(oldHistory);
-      const recoveredGood = oldHistory.slice(boundaryIdx);
-      if (recoveredGood.length > 0) {
-        const recoveredStart = new Date(recoveredGood[0].t).getTime();
-        pointsToSeed = pointsToSeed.filter((p) => new Date(p.t).getTime() < recoveredStart);
-        pointsToSeed = [...pointsToSeed, ...recoveredGood];
-      }
-    }
-
     for (let i = pointsToSeed.length - 1; i >= 0; i--) {
       await upstashPostPath(`/lpush/${encodeURIComponent(key)}`, JSON.stringify(pointsToSeed[i]));
     }
@@ -205,6 +156,15 @@ async function readAndUpdateHistory(key, entryValue, originTimestamp, currentVal
   }
 
   return history;
+}
+
+function mergeRecovered(liveHistory, recovered) {
+  if (!recovered || recovered.length === 0) return liveHistory;
+  const recoveredStart = new Date(recovered[0].t).getTime();
+  const recoveredEnd = new Date(recovered[recovered.length - 1].t).getTime();
+  const before = liveHistory.filter((p) => new Date(p.t).getTime() < recoveredStart);
+  const after = liveHistory.filter((p) => new Date(p.t).getTime() > recoveredEnd);
+  return [...before, ...recovered, ...after];
 }
 
 module.exports = async (req, res) => {
@@ -244,7 +204,10 @@ module.exports = async (req, res) => {
       spyPrice = null;
     }
 
-    const history = await readAndUpdateHistory(HISTORY_KEY, TRUE_ORIGIN_VALUE, ORIGIN_TIMESTAMP, currentValue, PORTFOLIO_HISTORICAL_CLOSES, RECOVERY_KEY);
+    let history = await readAndUpdateHistory(HISTORY_KEY, TRUE_ORIGIN_VALUE, ORIGIN_TIMESTAMP, currentValue, PORTFOLIO_HISTORICAL_CLOSES);
+    const recovered = await readRawHistory(RECOVERY_KEY);
+    history = mergeRecovered(history, recovered);
+
     const spyHistory = spyPrice != null
       ? await readAndUpdateHistory(SPY_HISTORY_KEY, SPY_ENTRY_PRICE, ORIGIN_TIMESTAMP, spyPrice, SPY_HISTORICAL_CLOSES)
       : [];
