@@ -21,16 +21,16 @@ const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 const HISTORY_KEY = 'alpha-intelligence-history-v2';
 const MAX_HISTORY_POINTS = 5000;
-const MAX_PLAUSIBLE_SWING = 0.08; // same sanity guard as api/quotes.js
+const MAX_PLAUSIBLE_SWING = 0.08;
 
-// Same benchmark constants as api/quotes.js — see that file for how
-// SPY_ENTRY_PRICE was derived.
-const SPY_ENTRY_PRICE = 754.30;
-const SPY_HISTORY_KEY = 'alpha-intelligence-spy-v1';
+// Same benchmark constants as api/quotes.js — see that file for the source
+// of SPY_ENTRY_PRICE and the full historical backfill. This file doesn't
+// need the backfill array itself (only quotes.js seeds it, via page loads);
+// it just needs to point at the same key so both files' writes land in the
+// same shared list.
+const SPY_ENTRY_PRICE = 747.03;
+const SPY_HISTORY_KEY = 'alpha-intelligence-spy-v2';
 
-// Same check as api/quotes.js — skip logging while the market's closed,
-// since Finnhub just echoes the last close price overnight/weekends and
-// that would otherwise fill the chart with long flat runs.
 function isMarketOpenNow() {
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
@@ -67,8 +67,6 @@ async function upstashPostPath(path, body) {
   return data.result;
 }
 
-// Logs one point for the given key, subject to the same plausibility guard
-// used everywhere else. Returns whether it actually logged (vs skipped).
 async function logPoint(key, currentValue) {
   const rawLast = await upstashGetPath(`/lrange/${encodeURIComponent(key)}/-1/-1`);
   const last = Array.isArray(rawLast) && rawLast.length > 0 ? JSON.parse(rawLast[0]) : null;
@@ -83,10 +81,6 @@ async function logPoint(key, currentValue) {
 }
 
 module.exports = async (req, res) => {
-  // Optional shared-secret check — only enforced if CRON_SECRET is set, so
-  // this works immediately without requiring extra setup, but can be locked
-  // down by adding that env var and putting the same value in the scheduler's
-  // URL as ?secret=...
   const secret = process.env.CRON_SECRET;
   if (secret && req.query.secret !== secret) {
     res.status(401).json({ error: 'Unauthorized' });
@@ -111,8 +105,6 @@ module.exports = async (req, res) => {
 
     const currentValue = POSITIONS.reduce((sum, p, i) => sum + p.quantity * prices[i], 0);
 
-    // SPY fetch is best-effort — if it fails, we just skip logging the
-    // benchmark this tick rather than failing the whole request.
     let spyPrice = null;
     try {
       const spyRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=SPY&token=${apiKey}`);
