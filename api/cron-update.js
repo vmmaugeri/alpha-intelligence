@@ -19,7 +19,7 @@ const POSITIONS = [
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
-const HISTORY_KEY = 'alpha-intelligence-history-v2';
+const HISTORY_KEY = 'alpha-intelligence-history-v5'; // bumped from v4 — see api/quotes.js for why
 const MAX_HISTORY_POINTS = 5000;
 const MAX_PLAUSIBLE_SWING = 0.08;
 
