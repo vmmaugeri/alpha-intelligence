@@ -43,7 +43,7 @@ function summarize(history) {
     count: history.length,
     first: history[0],
     last: history[history.length - 1],
-    distinctValueCount, // if this is close to 1, it's basically all flat/repeated
+    distinctValueCount,
     smallestGapMinutes: smallestGapMs === Infinity ? null : Math.round(smallestGapMs / 60000),
     firstFewPoints: history.slice(0, 5),
     lastFewPoints: history.slice(-5),
