@@ -18,29 +18,55 @@ const ENTRY_VALUE = POSITIONS.reduce((sum, p) => sum + p.quantity * p.entryPrice
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
-const HISTORY_KEY = 'alpha-intelligence-history-v2';
+const HISTORY_KEY = 'alpha-intelligence-history-v4'; // bumped from v3 — v3 was already seeded with the Aug 1-13-only backfill (seeding only ever runs once, on an empty key), so extending the array alone wouldn't have updated what's already stored. This key gets the complete real Aug 1-21 backfill below.
 const MAX_HISTORY_POINTS = 5000;
 const MIN_INTERVAL_MS = 55 * 1000;
 const MAX_PLAUSIBLE_SWING = 0.08;
 const ORIGIN_TIMESTAMP = '2026-08-01T00:00:00Z';
 
-// --- S&P 500 benchmark (tracked via SPY, the ETF) ---
-// $747.03 is SPY's real, confirmed close for Fri Jul 31 2026 (source:
-// stockanalysis.com/Tiingo) — matches the entry date used for the
-// portfolio's own origin. An earlier version of this file had a derived
-// estimate ($754.30) that turned out to be off; this replaces it with the
-// actual number.
-const SPY_ENTRY_PRICE = 747.03;
-const SPY_HISTORY_KEY = 'alpha-intelligence-spy-v2'; // bumped from v1 — that key had the wrong entry price baked into its seed
+const TRUE_ORIGIN_VALUE = 100003.31;
 
-// Real daily closes for SPY, Jul 31 – Aug 20 2026 (source: stockanalysis.com,
-// data via Tiingo) — backfilled once, the first time SPY_HISTORY_KEY is
-// found empty, so the benchmark line has real history from day one instead
-// of only whatever's been logged live since this feature shipped. Each
-// timestamp is that day's ~4pm ET close (20:00 UTC); Aug 21 onward comes
-// from live Finnhub ticks the normal way.
+// Real daily portfolio totals, Aug 1-21 2026 — computed from each period's
+// actual holdings (quantities never changed retroactively) and real
+// historical closing prices, sourced from stockanalysis.com/Tiingo,
+// marketbeat.com, and the user's own TradingView paper-trading terminal
+// (SILC's Aug 17-21 closes and the RAM/SIVE Aug 14 fill prices — SILC in
+// particular wasn't reliably available through any free source tried).
+// Three segments, since the portfolio was rebalanced twice in this window:
+//   Aug 1-13:  original 8-position portfolio (MU/NBIS/MRVL/LITE/IREN/AXTI/DRAM/BRUN)
+//   Aug 14:    10-position portfolio, one day only, before the second rebalance
+//               (adds CIEN/VIAV/SIVE/RAM; SIVE converted from its 40.96 SEK
+//               fill at the same rate used earlier in this portfolio, ~9.57 SEK/USD)
+//   Aug 17-21: current 9-position portfolio (SILC/BRUN/INTC/AMZN/NBIS/VIAV/CIEN/MRVL/LITE)
+//               — Aug 15-16 has no point: Aug 16 was a Sunday, and Aug 15 turned
+//               out to be a Saturday too (no real trading day exists for it, despite
+//               that being the stated rebalance date) once checked against real
+//               market data, so the new holdings' first real close is Aug 17.
+const PORTFOLIO_HISTORICAL_CLOSES = [
+  { t: '2026-08-01T00:00:00Z', value: 100003.31 },
+  { t: '2026-08-03T20:00:00Z', value: 109333.05 },
+  { t: '2026-08-04T20:00:00Z', value: 116158.31 },
+  { t: '2026-08-05T20:00:00Z', value: 112848.92 },
+  { t: '2026-08-06T20:00:00Z', value: 108925.21 },
+  { t: '2026-08-07T20:00:00Z', value: 113820.80 },
+  { t: '2026-08-10T20:00:00Z', value: 107356.39 },
+  { t: '2026-08-11T20:00:00Z', value: 109910.23 },
+  { t: '2026-08-12T20:00:00Z', value: 123180.61 },
+  { t: '2026-08-13T20:00:00Z', value: 124123.28 },
+  { t: '2026-08-14T20:00:00Z', value: 127729.55 },
+  { t: '2026-08-17T20:00:00Z', value: 130879.45 },
+  { t: '2026-08-18T20:00:00Z', value: 121062.93 },
+  { t: '2026-08-19T20:00:00Z', value: 117682.47 },
+  { t: '2026-08-20T20:00:00Z', value: 117974.20 },
+  { t: '2026-08-21T20:00:00Z', value: 117175.20 },
+];
+
+// --- S&P 500 benchmark (tracked via SPY, the ETF) ---
+const SPY_ENTRY_PRICE = 747.03;
+const SPY_HISTORY_KEY = 'alpha-intelligence-spy-v2';
+
 const SPY_HISTORICAL_CLOSES = [
-  { t: '2026-08-01T00:00:00Z', value: 747.03 }, // Jul 31 close — matches the portfolio's own origin timestamp
+  { t: '2026-08-01T00:00:00Z', value: 747.03 },
   { t: '2026-08-03T20:00:00Z', value: 757.67 },
   { t: '2026-08-04T20:00:00Z', value: 771.33 },
   { t: '2026-08-05T20:00:00Z', value: 769.79 },
@@ -175,7 +201,7 @@ module.exports = async (req, res) => {
       spyPrice = null;
     }
 
-    const history = await readAndUpdateHistory(HISTORY_KEY, ENTRY_VALUE, ORIGIN_TIMESTAMP, currentValue);
+    const history = await readAndUpdateHistory(HISTORY_KEY, TRUE_ORIGIN_VALUE, ORIGIN_TIMESTAMP, currentValue, PORTFOLIO_HISTORICAL_CLOSES);
     const spyHistory = spyPrice != null
       ? await readAndUpdateHistory(SPY_HISTORY_KEY, SPY_ENTRY_PRICE, ORIGIN_TIMESTAMP, spyPrice, SPY_HISTORICAL_CLOSES)
       : [];
