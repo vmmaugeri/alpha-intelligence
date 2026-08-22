@@ -92,6 +92,7 @@ const RANGE_MS = {
   '24H': 24 * 60 * 60 * 1000,
   '1W': 7 * 24 * 60 * 60 * 1000,
   '1M': 30 * 24 * 60 * 60 * 1000,
+  // 'All' deliberately has no entry — handled as a special case (no time filter at all)
 };
 
 const RANGE_LABELS = {
@@ -101,6 +102,11 @@ const RANGE_LABELS = {
   All: 'all time',
 };
 
+// Filters the full history down to the selected window. "All" skips the time
+// filter entirely, so it always includes the true origin point. If a window
+// would otherwise be empty (e.g. "24H" before the portfolio is even a day
+// old), falls back to showing whatever's most recent rather than an empty
+// chart.
 function filterHistoryByRange(history, range) {
   if (range === 'All') return history;
   const windowMs = RANGE_MS[range] || RANGE_MS['1W'];
@@ -109,6 +115,9 @@ function filterHistoryByRange(history, range) {
   return filtered.length > 0 ? filtered : history.slice(-1);
 }
 
+// % change from the start of the selected window to the live current value
+// (not the last logged point, which can be a few minutes stale) — this is
+// what drives the number shown next to the range buttons.
 function computeRangeReturnPct(filteredHistory, currentValue) {
   if (!filteredHistory || filteredHistory.length === 0 || currentValue == null) return null;
   const startValue = filteredHistory[0].value;
@@ -221,31 +230,16 @@ function drawChart(history, entryValue, hoverIndex, spyHistory, spyEntryPrice) {
     });
   }
 
-  // Scale to the real data. The Aug 1 origin line only ever applies to the
-  // "All" view — folding a 2+ week old reference point into a 24H/1W/1M
-  // window defeats the point of zooming in, regardless of how close that
-  // point happens to be to the current value. Real data is always shown in
-  // full either way; only the optional origin line is view-dependent. The
-  // benchmark line is included in the scale on every view, since comparing
-  // against it is useful at any zoom level.
-  const forceOrigin = selectedRange === 'All';
-  let rawMin = dataMin;
-  let rawMax = dataMax;
-  let showOriginLine = false;
-
-  if (entryValue != null && forceOrigin) {
-    rawMin = Math.min(rawMin, entryValue);
-    rawMax = Math.max(rawMax, entryValue);
-    showOriginLine = true;
-  }
-
-  if (benchmarkValues) {
-    benchmarkValues.forEach((v) => {
-      if (v == null) return;
-      rawMin = Math.min(rawMin, v);
-      rawMax = Math.max(rawMax, v);
-    });
-  }
+  // Scale tightly to the portfolio's own data on every view, including
+  // "All". The origin point and the benchmark line no longer stretch the
+  // axis to include them — letting a $100k reference point or a benchmark
+  // sitting near it drag the range wider was exactly what compressed real
+  // day-to-day volatility into a flat-looking sliver of the chart. Both
+  // still draw normally whenever their value happens to fall inside the
+  // resulting range; they just never force it wider.
+  const rawMin = dataMin;
+  const rawMax = dataMax;
+  const showOriginLine = selectedRange === 'All';
 
   const ticks = niceTicks(rawMin, rawMax, 4);
   const min = ticks[0];
@@ -413,12 +407,6 @@ function attachChartInteractivity() {
 }
 
 // --- Closed & trimmed positions ---
-// Static historical record (no live prices needed — these are settled).
-// Each entry's "buys" represents only the cost basis of shares that were
-// actually sold (not the full original holding, for positions that are
-// merely trimmed and still partly held) — this keeps the math scoped to
-// exactly the sold portion. Gain % and $ are computed from these raw
-// tranches rather than typed in, so the numbers are directly checkable.
 const CLOSED_POSITIONS = [
   {
     ticker: 'IREN',
@@ -564,10 +552,6 @@ async function init() {
     valueEl.textContent = formatCurrency(data.currentValue);
 
     lastHistory = data.history || [];
-    // Use the true origin point (history[0], permanently the Aug 1 $100k
-    // anchor) for the chart's dashed baseline — not data.entryValue, which
-    // is recomputed from today's holdings and stops meaning "day one" the
-    // moment a rebalance mixes old and new entry dates.
     lastEntryValue = (lastHistory[0] && lastHistory[0].value) || data.entryValue;
     lastCurrentValue = data.currentValue;
     lastSpyHistory = data.spyHistory || [];
