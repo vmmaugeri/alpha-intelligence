@@ -63,12 +63,14 @@ let chartState = null;
 let lastEntryValue = null;
 let lastHistory = [];
 let lastCurrentValue = null;
+let lastTrueOriginValue = null;
 let selectedRange = '1W';
 
 const RANGE_MS = {
   '24H': 24 * 60 * 60 * 1000,
   '1W': 7 * 24 * 60 * 60 * 1000,
   '1M': 30 * 24 * 60 * 60 * 1000,
+  // 'All' deliberately has no entry — handled as a special case (no time filter at all)
 };
 
 const RANGE_LABELS = {
@@ -78,6 +80,11 @@ const RANGE_LABELS = {
   All: 'all time',
 };
 
+// Filters the full history down to the selected window. "All" skips the time
+// filter entirely, so it always includes the true origin point. If a window
+// would otherwise be empty (e.g. "24H" before the portfolio is even a day
+// old), falls back to showing whatever's most recent rather than an empty
+// chart.
 function filterHistoryByRange(history, range) {
   if (range === 'All') return history;
   const windowMs = RANGE_MS[range] || RANGE_MS['1W'];
@@ -86,6 +93,9 @@ function filterHistoryByRange(history, range) {
   return filtered.length > 0 ? filtered : history.slice(-1);
 }
 
+// % change from the start of the selected window to the live current value
+// (not the last logged point, which can be a few minutes stale) — this is
+// what drives the number shown next to the range buttons.
 function computeRangeReturnPct(filteredHistory, currentValue) {
   if (!filteredHistory || filteredHistory.length === 0 || currentValue == null) return null;
   const startValue = filteredHistory[0].value;
@@ -96,8 +106,19 @@ function computeRangeReturnPct(filteredHistory, currentValue) {
 function updateRangeStat() {
   const changeEl = document.getElementById('allTimeChange');
   if (!changeEl) return;
-  const filtered = filterHistoryByRange(lastHistory, selectedRange);
-  const pct = computeRangeReturnPct(filtered, lastCurrentValue);
+
+  let pct;
+  if (selectedRange === 'All' && lastTrueOriginValue != null) {
+    // The chart's visible history is deliberately trimmed to start later
+    // than the portfolio's real beginning (see the on-page disclaimer) —
+    // but the "all time" figure should still reflect the true $100k
+    // starting point, not wherever the trimmed display happens to start.
+    pct = ((lastCurrentValue - lastTrueOriginValue) / lastTrueOriginValue) * 100;
+  } else {
+    const filtered = filterHistoryByRange(lastHistory, selectedRange);
+    pct = computeRangeReturnPct(filtered, lastCurrentValue);
+  }
+
   if (pct == null) return;
   const sign = pct >= 0 ? '+' : '';
   changeEl.textContent = `${sign}${pct.toFixed(2)}% ${RANGE_LABELS[selectedRange] || ''}`;
@@ -110,6 +131,8 @@ function renderChart(hoverIndex) {
   updateRangeStat();
 }
 
+// Picks clean, round gridline values (e.g. 100k / 105k / 110k) rather than
+// arbitrary fractions of the data range — standard "nice ticks" approach.
 function niceTicks(min, max, targetCount) {
   if (min === max) {
     min -= 1;
@@ -158,11 +181,20 @@ function drawChart(history, entryValue, hoverIndex) {
   const dataMin = Math.min(...values);
   const dataMax = Math.max(...values);
 
+  // Color reflects whether the *currently visible window* is up or down —
+  // same basis as the % shown next to the range buttons — not the all-time
+  // status, so the chart always matches whatever number it's sitting next to.
   const rangeIsPositive = history[history.length - 1].value >= history[0].value;
   const lineColor = rangeIsPositive ? '#6E8259' : '#A14A3F';
   const fillColorTop = rangeIsPositive ? 'rgba(110, 130, 89, 0.22)' : 'rgba(161, 74, 63, 0.18)';
   const fillColorBottom = rangeIsPositive ? 'rgba(110, 130, 89, 0)' : 'rgba(161, 74, 63, 0)';
 
+  // Scale tightly to the portfolio's own data on every view, including
+  // "All". The origin point no longer stretches the axis to include it —
+  // letting a reference point drag the range wider was exactly what
+  // compressed real day-to-day volatility into a flat-looking sliver of the
+  // chart. It still draws normally whenever its value happens to fall
+  // inside the resulting range; it just never forces it wider.
   const rawMin = dataMin;
   const rawMax = dataMax;
   const showOriginLine = selectedRange === 'All';
@@ -178,6 +210,7 @@ function drawChart(history, entryValue, hoverIndex) {
 
   const points = history.map((h, i) => [xFor(i), yFor(h.value)]);
 
+  // Gridlines at round values, with compact $ labels
   ctx.font = '10px Raleway, sans-serif';
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'right';
@@ -193,6 +226,7 @@ function drawChart(history, entryValue, hoverIndex) {
     ctx.fillText(formatCompact(v), padLeft - 8, y);
   });
 
+  // Dashed baseline at the entry value — only when it fits the visible range
   if (entryValue != null && showOriginLine) {
     const by = yFor(entryValue);
     ctx.strokeStyle = '#C9C1AE';
@@ -205,6 +239,7 @@ function drawChart(history, entryValue, hoverIndex) {
     ctx.setLineDash([]);
   }
 
+  // Soft fill under the line
   const gradient = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
   gradient.addColorStop(0, fillColorTop);
   gradient.addColorStop(1, fillColorBottom);
@@ -219,6 +254,7 @@ function drawChart(history, entryValue, hoverIndex) {
   ctx.fillStyle = gradient;
   ctx.fill();
 
+  // Performance line
   ctx.strokeStyle = lineColor;
   ctx.lineWidth = 2;
   ctx.lineJoin = 'round';
@@ -230,6 +266,7 @@ function drawChart(history, entryValue, hoverIndex) {
   });
   ctx.stroke();
 
+  // Hover guide line
   if (hoverIndex != null && points[hoverIndex]) {
     const [hx] = points[hoverIndex];
     ctx.strokeStyle = 'rgba(51, 50, 46, 0.22)';
@@ -240,6 +277,7 @@ function drawChart(history, entryValue, hoverIndex) {
     ctx.stroke();
   }
 
+  // A dot at the current value, plus one at whatever's being hovered
   points.forEach(([x, y], i) => {
     const isLast = i === points.length - 1;
     const isHover = i === hoverIndex;
@@ -250,6 +288,7 @@ function drawChart(history, entryValue, hoverIndex) {
     ctx.fill();
   });
 
+  // Date labels (first / last point)
   ctx.fillStyle = '#8F8A7C';
   ctx.font = '10px Raleway, sans-serif';
   ctx.textBaseline = 'alphabetic';
@@ -295,6 +334,8 @@ function attachChartInteractivity() {
   });
 }
 
+// --- Closed & trimmed positions ---
+// Static historical record (no live prices needed — these are settled).
 const CLOSED_POSITIONS = [
   {
     ticker: 'IREN',
@@ -419,6 +460,9 @@ function setMover(el, position) {
   el.classList.toggle('negative', position.dayChangePct < 0);
 }
 
+// Swaps the favicon between 📈 and 📉 based on all-time direction — deliberately
+// using the stable all-time figure rather than a noisier short-term one, so it
+// doesn't flicker back and forth on minor moves between refreshes.
 function updateFavicon(isPositive) {
   const emoji = isPositive ? '\u{1F4C8}' : '\u{1F4C9}';
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">${emoji}</text></svg>`;
@@ -437,8 +481,13 @@ async function init() {
     valueEl.textContent = formatCurrency(data.currentValue);
 
     lastHistory = data.history || [];
+    // Use the true origin point (history[0]) for the chart's dashed
+    // baseline when there's real history to anchor to — not data.entryValue,
+    // which is recomputed from today's holdings and stops meaning "day one"
+    // the moment a rebalance mixes old and new entry dates.
     lastEntryValue = (lastHistory[0] && lastHistory[0].value) || data.entryValue;
     lastCurrentValue = data.currentValue;
+    lastTrueOriginValue = data.trueOriginValue || null;
     renderChart();
     updateFavicon(data.allTimeReturnPct >= 0);
 
@@ -499,4 +548,7 @@ attachChartInteractivity();
 attachRangeButtons();
 renderClosedPositions();
 
+// Auto-refresh every 20s — matches the server-side cache window in
+// api/quotes.js. Well within Finnhub's free-tier rate limit (60/min;
+// this uses 8 per refresh, so ~24/min even at this pace).
 setInterval(tick, 20000);
