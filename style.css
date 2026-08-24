@@ -203,12 +203,17 @@ h1 {
   gap: 12px;
 }
 
-.positions-header-right span:first-child {
+.positions-header-right span:nth-child(1) {
+  min-width: 44px;
+  text-align: right;
+}
+
+.positions-header-right span:nth-child(2) {
   min-width: 52px;
   text-align: right;
 }
 
-.positions-header-right span:last-child {
+.positions-header-right span:nth-child(3) {
   min-width: 34px;
   text-align: right;
 }
@@ -242,6 +247,18 @@ h1 {
   display: flex;
   align-items: baseline;
   gap: 12px;
+}
+
+.pos-day-change {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  min-width: 44px;
+  text-align: right;
+}
+
+.pos-day-change.negative {
+  color: var(--negative);
 }
 
 .pos-change {
