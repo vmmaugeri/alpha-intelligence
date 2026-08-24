@@ -224,3 +224,313 @@ function drawChart(history, entryValue, hoverIndex) {
   });
   ctx.lineTo(points[points.length - 1][0], padTop + plotH);
   ctx.lineTo(points[0][0], padTop + plotH);
+  ctx.closePath();
+  ctx.fillStyle = gradient;
+  ctx.fill();
+
+  ctx.strokeStyle = lineColor;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  points.forEach(([x, y], i) => {
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  if (hoverIndex != null && points[hoverIndex]) {
+    const [hx] = points[hoverIndex];
+    ctx.strokeStyle = 'rgba(51, 50, 46, 0.22)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(hx, padTop);
+    ctx.lineTo(hx, padTop + plotH);
+    ctx.stroke();
+  }
+
+  points.forEach(([x, y], i) => {
+    const isLast = i === points.length - 1;
+    const isHover = i === hoverIndex;
+    if (!isLast && !isHover) return;
+    ctx.beginPath();
+    ctx.arc(x, y, isHover ? 5 : 4, 0, Math.PI * 2);
+    ctx.fillStyle = lineColor;
+    ctx.fill();
+  });
+
+  ctx.fillStyle = '#8F8A7C';
+  ctx.font = '10px Raleway, sans-serif';
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+  ctx.fillText(formatAxisLabel(history[0].t), padLeft, height - 4);
+  if (history.length > 1) {
+    ctx.textAlign = 'right';
+    ctx.fillText(formatAxisLabel(history[history.length - 1].t), width - padRight, height - 4);
+  }
+
+  chartState = { history, points };
+}
+
+function attachChartInteractivity() {
+  const canvas = document.getElementById('chart');
+  const tooltip = document.getElementById('chartTooltip');
+  if (!canvas || !tooltip) return;
+
+  canvas.addEventListener('mousemove', (e) => {
+    if (!chartState || chartState.points.length === 0) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    let nearest = 0;
+    let bestDist = Infinity;
+    chartState.points.forEach(([x], i) => {
+      const d = Math.abs(x - mx);
+      if (d < bestDist) {
+        bestDist = d;
+        nearest = i;
+      }
+    });
+    const point = chartState.history[nearest];
+    drawChart(chartState.history, lastEntryValue, nearest);
+    tooltip.textContent = `${formatTooltipLabel(point.t)} \u2014 ${formatCurrency(point.value)}`;
+    tooltip.style.left = chartState.points[nearest][0] + 'px';
+    tooltip.style.top = chartState.points[nearest][1] + 'px';
+    tooltip.style.opacity = '1';
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    tooltip.style.opacity = '0';
+    if (chartState) drawChart(chartState.history, lastEntryValue, null);
+  });
+}
+
+// --- Closed & trimmed positions ---
+// Static historical record (no live prices needed — these are settled).
+const CLOSED_POSITIONS = [
+  {
+    ticker: 'IREN',
+    status: 'Closed',
+    date: '2026-08-14',
+    buys: [{ qty: 271.73, price: 36.60 }],
+    sells: [{ qty: 271.73, price: 44.58 }],
+  },
+  {
+    ticker: 'DRAM',
+    status: 'Closed',
+    date: '2026-08-14',
+    buys: [{ qty: 158, price: 49.00 }],
+    sells: [{ qty: 158, price: 58.02 }],
+  },
+  {
+    ticker: 'MU',
+    status: 'Closed',
+    date: '2026-08-15',
+    buys: [{ qty: 24.3, price: 783.26 }],
+    sells: [
+      { qty: 4.85, price: 975.58 },
+      { qty: 19.45, price: 999.60 },
+    ],
+  },
+  {
+    ticker: 'MRVL',
+    status: 'Trimmed',
+    date: '2026-08-14',
+    buys: [{ qty: 24.45, price: 181.30 }],
+    sells: [{ qty: 24.45, price: 222.25 }],
+  },
+  {
+    ticker: 'LITE',
+    status: 'Trimmed',
+    date: '2026-08-14',
+    buys: [{ qty: 4.21, price: 687.06 }],
+    sells: [{ qty: 4.21, price: 890.00 }],
+  },
+  {
+    ticker: 'AXTI',
+    status: 'Closed',
+    date: '2026-08-15',
+    buys: [
+      { qty: 165.48, price: 57.79 },
+      { qty: 10.32, price: 77.66 },
+    ],
+    sells: [
+      { qty: 69.4, price: 78.25 },
+      { qty: 46.44, price: 77.68 },
+      { qty: 59.96, price: 88.01 },
+    ],
+  },
+  {
+    ticker: 'NBIS',
+    status: 'Trimmed',
+    date: '2026-08-15',
+    buys: [{ qty: 7.9, price: 185.50 }],
+    sells: [{ qty: 7.9, price: 272.82 }],
+  },
+];
+
+function computeClosedSummary(pos) {
+  const soldQty = pos.sells.reduce((s, x) => s + x.qty, 0);
+  const soldValue = pos.sells.reduce((s, x) => s + x.qty * x.price, 0);
+  const boughtValue = pos.buys.reduce((s, x) => s + x.qty * x.price, 0);
+  const gainPct = ((soldValue - boughtValue) / boughtValue) * 100;
+  const gainUsd =
+    pos.usdCostBasis != null ? pos.usdCostBasis * (gainPct / 100) : soldValue - boughtValue;
+  return { soldQty, gainPct, gainUsd };
+}
+
+function formatClosedDate(dateStr) {
+  return new Date(dateStr + 'T12:00:00Z').toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function renderClosedPositions() {
+  const list = document.getElementById('closedPositions');
+  if (!list) return;
+  list.innerHTML = '';
+
+  const MAX_SHOWN = 5;
+  const ranked = CLOSED_POSITIONS.map((pos) => ({ pos, summary: computeClosedSummary(pos) }))
+    .sort((a, b) => new Date(b.pos.date) - new Date(a.pos.date))
+    .slice(0, MAX_SHOWN);
+
+  ranked.forEach(({ pos, summary }) => {
+    const { gainPct, gainUsd } = summary;
+    const li = document.createElement('li');
+
+    const name = document.createElement('span');
+    name.className = 'closed-name';
+
+    const ticker = document.createElement('span');
+    ticker.className = 'closed-ticker';
+    ticker.textContent = pos.ticker;
+
+    const status = document.createElement('span');
+    status.className = 'closed-status';
+    status.textContent = `${pos.status} \u00b7 ${formatClosedDate(pos.date)}`;
+
+    name.appendChild(ticker);
+    name.appendChild(status);
+
+    const change = document.createElement('span');
+    change.className = 'closed-change';
+    const sign = gainPct >= 0 ? '+' : '';
+    change.innerHTML = `${sign}${gainPct.toFixed(1)}% <span class="closed-usd">(${sign}${formatCurrency(
+      gainUsd
+    )})</span>`;
+    change.classList.toggle('negative', gainPct < 0);
+
+    li.appendChild(name);
+    li.appendChild(change);
+    list.appendChild(li);
+  });
+}
+
+function attachRangeButtons() {
+  const buttons = document.querySelectorAll('.range-btn');
+  buttons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      selectedRange = btn.dataset.range;
+      buttons.forEach((b) => b.classList.toggle('active', b === btn));
+      renderChart();
+    });
+  });
+}
+
+function setMover(el, position) {
+  if (!el || !position) return;
+  const sign = position.dayChangePct >= 0 ? '+' : '';
+  el.textContent = `${position.ticker} ${sign}${position.dayChangePct.toFixed(1)}%`;
+  el.classList.toggle('negative', position.dayChangePct < 0);
+}
+
+function updateFavicon(isPositive) {
+  const emoji = isPositive ? '\u{1F4C8}' : '\u{1F4C9}';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">${emoji}</text></svg>`;
+  const link = document.getElementById('favicon');
+  if (link) link.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
+}
+
+async function init() {
+  const valueEl = document.getElementById('currentValue');
+
+  try {
+    const res = await fetch('/api/quotes');
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    valueEl.textContent = formatCurrency(data.currentValue);
+
+    lastHistory = data.history || [];
+    lastEntryValue = (lastHistory[0] && lastHistory[0].value) || data.entryValue;
+    lastCurrentValue = data.currentValue;
+    lastTrueOriginValue = data.trueOriginValue || null;
+    renderChart();
+    updateFavicon(data.allTimeReturnPct >= 0);
+
+    const list = document.getElementById('positions');
+    list.innerHTML = '';
+    data.positions.forEach((p) => {
+      const li = document.createElement('li');
+
+      const name = document.createElement('a');
+      name.className = 'pos-name';
+      name.href = `https://finance.yahoo.com/quote/${p.ticker}`;
+      name.target = '_blank';
+      name.rel = 'noopener';
+      name.textContent = p.ticker;
+
+      const right = document.createElement('span');
+      right.className = 'pos-right';
+
+      const dayChange = document.createElement('span');
+      dayChange.className = 'pos-day-change';
+      const dayChangeSign = p.dayChangePct >= 0 ? '+' : '';
+      dayChange.textContent = `${dayChangeSign}${p.dayChangePct.toFixed(1)}%`;
+      dayChange.classList.toggle('negative', p.dayChangePct < 0);
+
+      const change = document.createElement('span');
+      change.className = 'pos-change';
+      const changeSign = p.returnPct >= 0 ? '+' : '';
+      change.textContent = `${changeSign}${p.returnPct.toFixed(1)}%`;
+      change.classList.toggle('negative', p.returnPct < 0);
+
+      const weight = document.createElement('span');
+      weight.className = 'pos-weight';
+      weight.textContent = `${Math.round(p.weight)}%`;
+
+      right.appendChild(dayChange);
+      right.appendChild(change);
+      right.appendChild(weight);
+      li.appendChild(name);
+      li.appendChild(right);
+      list.appendChild(li);
+    });
+
+    if (data.positions.length > 0) {
+      const gainer = data.positions.reduce((a, b) => (b.dayChangePct > a.dayChangePct ? b : a));
+      const loser = data.positions.reduce((a, b) => (b.dayChangePct < a.dayChangePct ? b : a));
+      setMover(document.getElementById('gainerValue'), gainer);
+      setMover(document.getElementById('loserValue'), loser);
+    }
+
+    document.getElementById('updated').textContent =
+      'Updated ' + new Date(data.updatedAt).toLocaleString();
+  } catch (err) {
+    valueEl.textContent = 'Unable to load prices';
+    console.error(err);
+  }
+}
+
+async function tick() {
+  await init();
+  updateMarketStatus();
+}
+
+tick();
+attachChartInteractivity();
+attachRangeButtons();
+renderClosedPositions();
+
+setInterval(tick, 20000);
