@@ -80,11 +80,6 @@ const RANGE_LABELS = {
   All: 'all time',
 };
 
-// Filters the full history down to the selected window. "All" skips the time
-// filter entirely, so it always includes the true origin point. If a window
-// would otherwise be empty (e.g. "24H" before the portfolio is even a day
-// old), falls back to showing whatever's most recent rather than an empty
-// chart.
 function filterHistoryByRange(history, range) {
   if (range === 'All') return history;
   const windowMs = RANGE_MS[range] || RANGE_MS['1W'];
@@ -93,9 +88,6 @@ function filterHistoryByRange(history, range) {
   return filtered.length > 0 ? filtered : history.slice(-1);
 }
 
-// % change from the start of the selected window to the live current value
-// (not the last logged point, which can be a few minutes stale) — this is
-// what drives the number shown next to the range buttons.
 function computeRangeReturnPct(filteredHistory, currentValue) {
   if (!filteredHistory || filteredHistory.length === 0 || currentValue == null) return null;
   const startValue = filteredHistory[0].value;
@@ -109,10 +101,6 @@ function updateRangeStat() {
 
   let pct;
   if (selectedRange === 'All' && lastTrueOriginValue != null) {
-    // The chart's visible history is deliberately trimmed to start later
-    // than the portfolio's real beginning (see the on-page disclaimer) —
-    // but the "all time" figure should still reflect the true $100k
-    // starting point, not wherever the trimmed display happens to start.
     pct = ((lastCurrentValue - lastTrueOriginValue) / lastTrueOriginValue) * 100;
   } else {
     const filtered = filterHistoryByRange(lastHistory, selectedRange);
@@ -131,8 +119,6 @@ function renderChart(hoverIndex) {
   updateRangeStat();
 }
 
-// Picks clean, round gridline values (e.g. 100k / 105k / 110k) rather than
-// arbitrary fractions of the data range — standard "nice ticks" approach.
 function niceTicks(min, max, targetCount) {
   if (min === max) {
     min -= 1;
@@ -181,20 +167,11 @@ function drawChart(history, entryValue, hoverIndex) {
   const dataMin = Math.min(...values);
   const dataMax = Math.max(...values);
 
-  // Color reflects whether the *currently visible window* is up or down —
-  // same basis as the % shown next to the range buttons — not the all-time
-  // status, so the chart always matches whatever number it's sitting next to.
   const rangeIsPositive = history[history.length - 1].value >= history[0].value;
   const lineColor = rangeIsPositive ? '#6E8259' : '#A14A3F';
   const fillColorTop = rangeIsPositive ? 'rgba(110, 130, 89, 0.22)' : 'rgba(161, 74, 63, 0.18)';
   const fillColorBottom = rangeIsPositive ? 'rgba(110, 130, 89, 0)' : 'rgba(161, 74, 63, 0)';
 
-  // Scale tightly to the portfolio's own data on every view, including
-  // "All". The origin point no longer stretches the axis to include it —
-  // letting a reference point drag the range wider was exactly what
-  // compressed real day-to-day volatility into a flat-looking sliver of the
-  // chart. It still draws normally whenever its value happens to fall
-  // inside the resulting range; it just never forces it wider.
   const rawMin = dataMin;
   const rawMax = dataMax;
   const showOriginLine = selectedRange === 'All';
@@ -210,7 +187,6 @@ function drawChart(history, entryValue, hoverIndex) {
 
   const points = history.map((h, i) => [xFor(i), yFor(h.value)]);
 
-  // Gridlines at round values, with compact $ labels
   ctx.font = '10px Raleway, sans-serif';
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'right';
@@ -226,7 +202,6 @@ function drawChart(history, entryValue, hoverIndex) {
     ctx.fillText(formatCompact(v), padLeft - 8, y);
   });
 
-  // Dashed baseline at the entry value — only when it fits the visible range
   if (entryValue != null && showOriginLine) {
     const by = yFor(entryValue);
     ctx.strokeStyle = '#C9C1AE';
@@ -239,7 +214,6 @@ function drawChart(history, entryValue, hoverIndex) {
     ctx.setLineDash([]);
   }
 
-  // Soft fill under the line
   const gradient = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
   gradient.addColorStop(0, fillColorTop);
   gradient.addColorStop(1, fillColorBottom);
@@ -250,305 +224,3 @@ function drawChart(history, entryValue, hoverIndex) {
   });
   ctx.lineTo(points[points.length - 1][0], padTop + plotH);
   ctx.lineTo(points[0][0], padTop + plotH);
-  ctx.closePath();
-  ctx.fillStyle = gradient;
-  ctx.fill();
-
-  // Performance line
-  ctx.strokeStyle = lineColor;
-  ctx.lineWidth = 2;
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  points.forEach(([x, y], i) => {
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-
-  // Hover guide line
-  if (hoverIndex != null && points[hoverIndex]) {
-    const [hx] = points[hoverIndex];
-    ctx.strokeStyle = 'rgba(51, 50, 46, 0.22)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(hx, padTop);
-    ctx.lineTo(hx, padTop + plotH);
-    ctx.stroke();
-  }
-
-  // A dot at the current value, plus one at whatever's being hovered
-  points.forEach(([x, y], i) => {
-    const isLast = i === points.length - 1;
-    const isHover = i === hoverIndex;
-    if (!isLast && !isHover) return;
-    ctx.beginPath();
-    ctx.arc(x, y, isHover ? 5 : 4, 0, Math.PI * 2);
-    ctx.fillStyle = lineColor;
-    ctx.fill();
-  });
-
-  // Date labels (first / last point)
-  ctx.fillStyle = '#8F8A7C';
-  ctx.font = '10px Raleway, sans-serif';
-  ctx.textBaseline = 'alphabetic';
-  ctx.textAlign = 'left';
-  ctx.fillText(formatAxisLabel(history[0].t), padLeft, height - 4);
-  if (history.length > 1) {
-    ctx.textAlign = 'right';
-    ctx.fillText(formatAxisLabel(history[history.length - 1].t), width - padRight, height - 4);
-  }
-
-  chartState = { history, points };
-}
-
-function attachChartInteractivity() {
-  const canvas = document.getElementById('chart');
-  const tooltip = document.getElementById('chartTooltip');
-  if (!canvas || !tooltip) return;
-
-  canvas.addEventListener('mousemove', (e) => {
-    if (!chartState || chartState.points.length === 0) return;
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    let nearest = 0;
-    let bestDist = Infinity;
-    chartState.points.forEach(([x], i) => {
-      const d = Math.abs(x - mx);
-      if (d < bestDist) {
-        bestDist = d;
-        nearest = i;
-      }
-    });
-    const point = chartState.history[nearest];
-    drawChart(chartState.history, lastEntryValue, nearest);
-    tooltip.textContent = `${formatTooltipLabel(point.t)} \u2014 ${formatCurrency(point.value)}`;
-    tooltip.style.left = chartState.points[nearest][0] + 'px';
-    tooltip.style.top = chartState.points[nearest][1] + 'px';
-    tooltip.style.opacity = '1';
-  });
-
-  canvas.addEventListener('mouseleave', () => {
-    tooltip.style.opacity = '0';
-    if (chartState) drawChart(chartState.history, lastEntryValue, null);
-  });
-}
-
-// --- Closed & trimmed positions ---
-// Static historical record (no live prices needed — these are settled).
-const CLOSED_POSITIONS = [
-  {
-    ticker: 'IREN',
-    status: 'Closed',
-    buys: [{ qty: 271.73, price: 36.60 }],
-    sells: [{ qty: 271.73, price: 44.58 }],
-  },
-  {
-    ticker: 'DRAM',
-    status: 'Closed',
-    buys: [{ qty: 158, price: 49.00 }],
-    sells: [{ qty: 158, price: 58.02 }],
-  },
-  {
-    ticker: 'MU',
-    status: 'Closed',
-    buys: [{ qty: 24.3, price: 783.26 }],
-    sells: [
-      { qty: 4.85, price: 975.58 },
-      { qty: 19.45, price: 999.60 },
-    ],
-  },
-  {
-    ticker: 'MRVL',
-    status: 'Trimmed',
-    buys: [{ qty: 24.45, price: 181.30 }],
-    sells: [{ qty: 24.45, price: 222.25 }],
-  },
-  {
-    ticker: 'LITE',
-    status: 'Trimmed',
-    buys: [{ qty: 4.21, price: 687.06 }],
-    sells: [{ qty: 4.21, price: 890.00 }],
-  },
-  {
-    ticker: 'AXTI',
-    status: 'Closed',
-    buys: [
-      { qty: 165.48, price: 57.79 },
-      { qty: 10.32, price: 77.66 },
-    ],
-    sells: [
-      { qty: 69.4, price: 78.25 },
-      { qty: 46.44, price: 77.68 },
-      { qty: 59.96, price: 88.01 },
-    ],
-  },
-  {
-    ticker: 'NBIS',
-    status: 'Trimmed',
-    buys: [{ qty: 7.9, price: 185.50 }],
-    sells: [{ qty: 7.9, price: 272.82 }],
-  },
-];
-
-function computeClosedSummary(pos) {
-  const soldQty = pos.sells.reduce((s, x) => s + x.qty, 0);
-  const soldValue = pos.sells.reduce((s, x) => s + x.qty * x.price, 0);
-  const boughtValue = pos.buys.reduce((s, x) => s + x.qty * x.price, 0);
-  const gainPct = ((soldValue - boughtValue) / boughtValue) * 100;
-  const gainUsd =
-    pos.usdCostBasis != null ? pos.usdCostBasis * (gainPct / 100) : soldValue - boughtValue;
-  return { soldQty, gainPct, gainUsd };
-}
-
-function renderClosedPositions() {
-  const list = document.getElementById('closedPositions');
-  if (!list) return;
-  list.innerHTML = '';
-
-  const ranked = CLOSED_POSITIONS.map((pos) => ({ pos, summary: computeClosedSummary(pos) })).sort(
-    (a, b) => b.summary.gainPct - a.summary.gainPct
-  );
-
-  ranked.forEach(({ pos, summary }) => {
-    const { gainPct, gainUsd } = summary;
-    const li = document.createElement('li');
-
-    const name = document.createElement('span');
-    name.className = 'closed-name';
-
-    const ticker = document.createElement('span');
-    ticker.className = 'closed-ticker';
-    ticker.textContent = pos.ticker;
-
-    const status = document.createElement('span');
-    status.className = 'closed-status';
-    status.textContent = pos.status;
-
-    name.appendChild(ticker);
-    name.appendChild(status);
-
-    const change = document.createElement('span');
-    change.className = 'closed-change';
-    const sign = gainPct >= 0 ? '+' : '';
-    change.innerHTML = `${sign}${gainPct.toFixed(1)}% <span class="closed-usd">(${sign}${formatCurrency(
-      gainUsd
-    )})</span>`;
-    change.classList.toggle('negative', gainPct < 0);
-
-    li.appendChild(name);
-    li.appendChild(change);
-    list.appendChild(li);
-  });
-}
-
-function attachRangeButtons() {
-  const buttons = document.querySelectorAll('.range-btn');
-  buttons.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      selectedRange = btn.dataset.range;
-      buttons.forEach((b) => b.classList.toggle('active', b === btn));
-      renderChart();
-    });
-  });
-}
-
-function setMover(el, position) {
-  if (!el || !position) return;
-  const sign = position.dayChangePct >= 0 ? '+' : '';
-  el.textContent = `${position.ticker} ${sign}${position.dayChangePct.toFixed(1)}%`;
-  el.classList.toggle('negative', position.dayChangePct < 0);
-}
-
-// Swaps the favicon between 📈 and 📉 based on all-time direction — deliberately
-// using the stable all-time figure rather than a noisier short-term one, so it
-// doesn't flicker back and forth on minor moves between refreshes.
-function updateFavicon(isPositive) {
-  const emoji = isPositive ? '\u{1F4C8}' : '\u{1F4C9}';
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">${emoji}</text></svg>`;
-  const link = document.getElementById('favicon');
-  if (link) link.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
-}
-
-async function init() {
-  const valueEl = document.getElementById('currentValue');
-
-  try {
-    const res = await fetch('/api/quotes');
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-
-    valueEl.textContent = formatCurrency(data.currentValue);
-
-    lastHistory = data.history || [];
-    // Use the true origin point (history[0]) for the chart's dashed
-    // baseline when there's real history to anchor to — not data.entryValue,
-    // which is recomputed from today's holdings and stops meaning "day one"
-    // the moment a rebalance mixes old and new entry dates.
-    lastEntryValue = (lastHistory[0] && lastHistory[0].value) || data.entryValue;
-    lastCurrentValue = data.currentValue;
-    lastTrueOriginValue = data.trueOriginValue || null;
-    renderChart();
-    updateFavicon(data.allTimeReturnPct >= 0);
-
-    const list = document.getElementById('positions');
-    list.innerHTML = '';
-    data.positions.forEach((p) => {
-      const li = document.createElement('li');
-
-      const name = document.createElement('a');
-      name.className = 'pos-name';
-      name.href = `https://finance.yahoo.com/quote/${p.ticker}`;
-      name.target = '_blank';
-      name.rel = 'noopener';
-      name.textContent = p.ticker;
-
-      const right = document.createElement('span');
-      right.className = 'pos-right';
-
-      const change = document.createElement('span');
-      change.className = 'pos-change';
-      const changeSign = p.returnPct >= 0 ? '+' : '';
-      change.textContent = `${changeSign}${p.returnPct.toFixed(1)}%`;
-      change.classList.toggle('negative', p.returnPct < 0);
-
-      const weight = document.createElement('span');
-      weight.className = 'pos-weight';
-      weight.textContent = `${Math.round(p.weight)}%`;
-
-      right.appendChild(change);
-      right.appendChild(weight);
-      li.appendChild(name);
-      li.appendChild(right);
-      list.appendChild(li);
-    });
-
-    if (data.positions.length > 0) {
-      const gainer = data.positions.reduce((a, b) => (b.dayChangePct > a.dayChangePct ? b : a));
-      const loser = data.positions.reduce((a, b) => (b.dayChangePct < a.dayChangePct ? b : a));
-      setMover(document.getElementById('gainerValue'), gainer);
-      setMover(document.getElementById('loserValue'), loser);
-    }
-
-    document.getElementById('updated').textContent =
-      'Updated ' + new Date(data.updatedAt).toLocaleString();
-  } catch (err) {
-    valueEl.textContent = 'Unable to load prices';
-    console.error(err);
-  }
-}
-
-async function tick() {
-  await init();
-  updateMarketStatus();
-}
-
-tick();
-attachChartInteractivity();
-attachRangeButtons();
-renderClosedPositions();
-
-// Auto-refresh every 20s — matches the server-side cache window in
-// api/quotes.js. Well within Finnhub's free-tier rate limit (60/min;
-// this uses 8 per refresh, so ~24/min even at this pace).
-setInterval(tick, 20000);
