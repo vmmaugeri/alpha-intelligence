@@ -28,7 +28,6 @@ function formatTooltipLabel(isoString) {
   });
 }
 
-// --- Market status (real NYSE hours, via America/New_York time) ---
 function getNYParts() {
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
@@ -70,7 +69,6 @@ const RANGE_MS = {
   '24H': 24 * 60 * 60 * 1000,
   '1W': 7 * 24 * 60 * 60 * 1000,
   '1M': 30 * 24 * 60 * 60 * 1000,
-  // 'All' deliberately has no entry — handled as a special case (no time filter at all)
 };
 
 const RANGE_LABELS = {
@@ -305,7 +303,6 @@ function attachChartInteractivity() {
 }
 
 // --- Closed & trimmed positions ---
-// Static historical record (no live prices needed — these are settled).
 const CLOSED_POSITIONS = [
   {
     ticker: 'IREN',
@@ -333,10 +330,13 @@ const CLOSED_POSITIONS = [
   },
   {
     ticker: 'MRVL',
-    status: 'Trimmed',
-    date: '2026-08-14',
-    buys: [{ qty: 24.45, price: 181.30 }],
-    sells: [{ qty: 24.45, price: 222.25 }],
+    status: 'Closed',
+    date: '2026-08-25',
+    buys: [{ qty: 79.97, price: 181.30 }],
+    sells: [
+      { qty: 24.45, price: 222.25 },
+      { qty: 55.52, price: 242.61 },
+    ],
   },
   {
     ticker: 'LITE',
@@ -390,7 +390,7 @@ function renderClosedPositions() {
   if (!list) return;
   list.innerHTML = '';
 
-  const MAX_SHOWN = 5;
+  const MAX_SHOWN = 3;
   const ranked = CLOSED_POSITIONS.map((pos) => ({ pos, summary: computeClosedSummary(pos) }))
     .sort((a, b) => new Date(b.pos.date) - new Date(a.pos.date))
     .slice(0, MAX_SHOWN);
