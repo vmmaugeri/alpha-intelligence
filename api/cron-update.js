@@ -13,7 +13,7 @@ const POSITIONS = [
   { ticker: 'NBIS', quantity: 70.87,  entryPrice: 185.50 },
   { ticker: 'VIAV', quantity: 260.6,  entryPrice: 43.02  },
   { ticker: 'CIEN', quantity: 40.42,  entryPrice: 429.61 },
-  { ticker: 'MRVL', quantity: 55.52,  entryPrice: 181.30 },
+  { ticker: 'BE',   quantity: 63.23,  entryPrice: 213.05 },
   { ticker: 'LITE', quantity: 11.19,  entryPrice: 687.06 },
 ];
 
