@@ -10,7 +10,7 @@ const POSITIONS = [
   { ticker: 'NBIS', name: 'Nebius Group',          quantity: 70.87,  entryPrice: 185.50 },
   { ticker: 'VIAV', name: 'Viavi Solutions',       quantity: 260.6,  entryPrice: 43.02  },
   { ticker: 'CIEN', name: 'Ciena Corporation',     quantity: 40.42,  entryPrice: 429.61 },
-  { ticker: 'MRVL', name: 'Marvell Technology',    quantity: 55.52,  entryPrice: 181.30 },
+  { ticker: 'BE',   name: 'Bloom Energy',          quantity: 63.23,  entryPrice: 213.05 },
   { ticker: 'LITE', name: 'Lumentum Holdings',     quantity: 11.19,  entryPrice: 687.06 },
 ];
 
@@ -26,10 +26,6 @@ const MIN_INTERVAL_MS = 55 * 1000;
 const MAX_PLAUSIBLE_SWING = 0.08;
 const ORIGIN_TIMESTAMP = '2026-08-01T00:00:00Z';
 
-// The chart is deliberately cut to start here rather than at the true Aug 1
-// origin — see the on-page disclaimer, which explains the portfolio's real
-// starting value was $100,000 on Aug 1 despite the chart not visibly
-// starting there.
 const DISPLAY_START_TIMESTAMP = '2026-08-12T19:45:00Z'; // Aug 12, 3:45pm ET
 
 const TRUE_ORIGIN_VALUE = 100003.31;
@@ -182,7 +178,6 @@ module.exports = async (req, res) => {
     const recovered = await readRawHistory(RECOVERY_KEY);
     history = mergeRecovered(history, recovered);
 
-    // Cut the displayed history to start at DISPLAY_START_TIMESTAMP.
     const displayStartTime = new Date(DISPLAY_START_TIMESTAMP).getTime();
     history = history.filter((p) => new Date(p.t).getTime() >= displayStartTime);
 
