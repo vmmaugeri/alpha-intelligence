@@ -6,15 +6,15 @@
 // pinger instead; this route is a normal HTTP endpoint either way.
 
 const POSITIONS = [
-  { ticker: 'SILC', quantity: 125.64, entryPrice: 49.99  },
-  { ticker: 'BRUN', quantity: 694.14, entryPrice: 20.21  },
-  { ticker: 'INTC', quantity: 176.28, entryPrice: 102.16 },
-  { ticker: 'AMZN', quantity: 68.35,  entryPrice: 263.37 },
-  { ticker: 'NBIS', quantity: 70.87,  entryPrice: 185.50 },
-  { ticker: 'VIAV', quantity: 260.6,  entryPrice: 43.02  },
-  { ticker: 'CIEN', quantity: 40.42,  entryPrice: 429.61 },
-  { ticker: 'BE',   quantity: 63.23,  entryPrice: 213.05 },
-  { ticker: 'LITE', quantity: 11.19,  entryPrice: 687.06 },
+  { ticker: 'INTC', quantity: 186.28, entryPrice: 101.59 },
+  { ticker: 'BRUN', quantity: 894.14, entryPrice: 19.96  },
+  { ticker: 'BE',   quantity: 77.23,  entryPrice: 213.90 },
+  { ticker: 'NBIS', quantity: 79.87,  entryPrice: 188.37 },
+  { ticker: 'MRVL', quantity: 70,     entryPrice: 222.50 },
+  { ticker: 'CRWD', quantity: 60.71,  entryPrice: 215.07 },
+  { ticker: 'CIEN', quantity: 24.42,  entryPrice: 429.61 },
+  { ticker: 'VIAV', quantity: 157.6,  entryPrice: 43.02  },
+  { ticker: 'SILC', quantity: 130.64, entryPrice: 49.81  },
 ];
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
