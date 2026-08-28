@@ -303,7 +303,15 @@ function attachChartInteractivity() {
 }
 
 // --- Closed & trimmed positions ---
+// Static historical record (no live prices needed — these are settled).
 const CLOSED_POSITIONS = [
+  {
+    ticker: 'AMZN',
+    status: 'Closed',
+    date: '2026-08-28',
+    buys: [{ qty: 68.35, price: 263.37 }],
+    sells: [{ qty: 68.35, price: 266.57 }],
+  },
   {
     ticker: 'IREN',
     status: 'Closed',
@@ -340,10 +348,13 @@ const CLOSED_POSITIONS = [
   },
   {
     ticker: 'LITE',
-    status: 'Trimmed',
-    date: '2026-08-14',
-    buys: [{ qty: 4.21, price: 687.06 }],
-    sells: [{ qty: 4.21, price: 890.00 }],
+    status: 'Closed',
+    date: '2026-08-28',
+    buys: [{ qty: 15.4, price: 687.06 }],
+    sells: [
+      { qty: 4.21, price: 890.00 },
+      { qty: 11.19, price: 915.07 },
+    ],
   },
   {
     ticker: 'AXTI',
