@@ -3,15 +3,15 @@
 // then computes current value, all-time return, and per-position weight.
 
 const POSITIONS = [
-  { ticker: 'SILC', name: 'Silicom Ltd',           quantity: 125.64, entryPrice: 49.99  },
-  { ticker: 'BRUN', name: 'Boost Run',             quantity: 694.14, entryPrice: 20.21  },
-  { ticker: 'INTC', name: 'Intel Corporation',     quantity: 176.28, entryPrice: 102.16 },
-  { ticker: 'AMZN', name: 'Amazon.com',            quantity: 68.35,  entryPrice: 263.37 },
-  { ticker: 'NBIS', name: 'Nebius Group',          quantity: 70.87,  entryPrice: 185.50 },
-  { ticker: 'VIAV', name: 'Viavi Solutions',       quantity: 260.6,  entryPrice: 43.02  },
-  { ticker: 'CIEN', name: 'Ciena Corporation',     quantity: 40.42,  entryPrice: 429.61 },
-  { ticker: 'BE',   name: 'Bloom Energy',          quantity: 63.23,  entryPrice: 213.05 },
-  { ticker: 'LITE', name: 'Lumentum Holdings',     quantity: 11.19,  entryPrice: 687.06 },
+  { ticker: 'INTC', name: 'Intel Corporation',      quantity: 186.28, entryPrice: 101.59 },
+  { ticker: 'BRUN', name: 'Boost Run',              quantity: 894.14, entryPrice: 19.96  },
+  { ticker: 'BE',   name: 'Bloom Energy',           quantity: 77.23,  entryPrice: 213.90 },
+  { ticker: 'NBIS', name: 'Nebius Group',           quantity: 79.87,  entryPrice: 188.37 },
+  { ticker: 'MRVL', name: 'Marvell Technology',     quantity: 70,     entryPrice: 222.50 },
+  { ticker: 'CRWD', name: 'CrowdStrike Holdings',   quantity: 60.71,  entryPrice: 215.07 },
+  { ticker: 'CIEN', name: 'Ciena Corporation',      quantity: 24.42,  entryPrice: 429.61 },
+  { ticker: 'VIAV', name: 'Viavi Solutions',        quantity: 157.6,  entryPrice: 43.02  },
+  { ticker: 'SILC', name: 'Silicom Ltd',            quantity: 130.64, entryPrice: 49.81  },
 ];
 
 const ENTRY_VALUE = POSITIONS.reduce((sum, p) => sum + p.quantity * p.entryPrice, 0);
