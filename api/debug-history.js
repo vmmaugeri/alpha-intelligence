@@ -61,6 +61,7 @@ module.exports = async (req, res) => {
     'alpha-intelligence-history-v3',
     'alpha-intelligence-history-v4',
     'alpha-intelligence-history-v5',
+    'alpha-intelligence-history-v6',
   ];
 
   const results = {};
