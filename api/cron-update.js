@@ -9,9 +9,8 @@ const POSITIONS = [
   { ticker: 'INTC', quantity: 186.28, entryPrice: 101.59 },
   { ticker: 'BRUN', quantity: 894.14, entryPrice: 19.96  },
   { ticker: 'BE',   quantity: 77.23,  entryPrice: 213.90 },
-  { ticker: 'NBIS', quantity: 79.87,  entryPrice: 188.37 },
+  { ticker: 'NBIS', quantity: 132.44, entryPrice: 208.63 },
   { ticker: 'MRVL', quantity: 70,     entryPrice: 222.50 },
-  { ticker: 'CRWD', quantity: 60.71,  entryPrice: 215.07 },
   { ticker: 'CIEN', quantity: 24.42,  entryPrice: 429.61 },
   { ticker: 'VIAV', quantity: 157.6,  entryPrice: 43.02  },
   { ticker: 'SILC', quantity: 130.64, entryPrice: 49.81  },
@@ -21,8 +20,11 @@ const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 const HISTORY_KEY = 'alpha-intelligence-history-v6';
 const MAX_HISTORY_POINTS = 5000;
-const MAX_PLAUSIBLE_SWING = 0.08;
+const MAX_PLAUSIBLE_SWING = 0.08; // same sanity guard as api/quotes.js
 
+// Same check as api/quotes.js — skip logging while the market's closed,
+// since Finnhub just echoes the last close price overnight/weekends and
+// that would otherwise fill the chart with long flat runs.
 function isMarketOpenNow() {
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
@@ -59,6 +61,8 @@ async function upstashPostPath(path, body) {
   return data.result;
 }
 
+// Logs one point for the given key, subject to the same plausibility guard
+// used everywhere else. Returns whether it actually logged (vs skipped).
 async function logPoint(key, currentValue) {
   const rawLast = await upstashGetPath(`/lrange/${encodeURIComponent(key)}/-1/-1`);
   const last = Array.isArray(rawLast) && rawLast.length > 0 ? JSON.parse(rawLast[0]) : null;
@@ -73,6 +77,10 @@ async function logPoint(key, currentValue) {
 }
 
 module.exports = async (req, res) => {
+  // Optional shared-secret check — only enforced if CRON_SECRET is set, so
+  // this works immediately without requiring extra setup, but can be locked
+  // down by adding that env var and putting the same value in the scheduler's
+  // URL as ?secret=...
   const secret = process.env.CRON_SECRET;
   if (secret && req.query.secret !== secret) {
     res.status(401).json({ error: 'Unauthorized' });
