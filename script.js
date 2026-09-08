@@ -28,6 +28,7 @@ function formatTooltipLabel(isoString) {
   });
 }
 
+// --- Market status (real NYSE hours, via America/New_York time) ---
 function getNYParts() {
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
@@ -305,6 +306,16 @@ function attachChartInteractivity() {
 // --- Closed & trimmed positions ---
 // Static historical record (no live prices needed — these are settled).
 const CLOSED_POSITIONS = [
+  {
+    ticker: 'CRWD',
+    status: 'Closed',
+    date: '2026-09-08',
+    buys: [
+      { qty: 60.71, price: 215.07 },
+      { qty: 0.01, price: 207.21 },
+    ],
+    sells: [{ qty: 60.72, price: 207.31 }],
+  },
   {
     ticker: 'AMZN',
     status: 'Closed',
