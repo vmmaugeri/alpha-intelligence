@@ -307,6 +307,13 @@ function attachChartInteractivity() {
 // Static historical record (no live prices needed — these are settled).
 const CLOSED_POSITIONS = [
   {
+    ticker: 'MRVL',
+    status: 'Closed',
+    date: '2026-09-09',
+    buys: [{ qty: 70, price: 222.50 }],
+    sells: [{ qty: 70, price: 232.46 }],
+  },
+  {
     ticker: 'CRWD',
     status: 'Closed',
     date: '2026-09-08',
