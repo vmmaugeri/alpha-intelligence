@@ -7,14 +7,14 @@
 
 const POSITIONS = [
   { ticker: 'INTC', quantity: 186.28, entryPrice: 101.59 },
-  { ticker: 'BRUN', quantity: 894.14, entryPrice: 19.96  },
-  { ticker: 'BE',   quantity: 47.23,  entryPrice: 213.90 },
+  { ticker: 'BRUN', quantity: 923.49, entryPrice: 19.88  },
   { ticker: 'NBIS', quantity: 82.44,  entryPrice: 208.63 },
   { ticker: 'AAOI', quantity: 136.64, entryPrice: 111.21 },
   { ticker: 'MU',   quantity: 21.48,  entryPrice: 1011.60 },
   { ticker: 'CIEN', quantity: 24.42,  entryPrice: 429.61 },
   { ticker: 'VIAV', quantity: 157.6,  entryPrice: 43.02  },
-  { ticker: 'SILC', quantity: 130.64, entryPrice: 49.81  },
+  { ticker: 'SNDK', quantity: 5.77,   entryPrice: 1780.99 },
+  { ticker: 'META', quantity: 12.06,  entryPrice: 708.13 },
 ];
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
