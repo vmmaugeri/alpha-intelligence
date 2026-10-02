@@ -31,7 +31,9 @@ history), three things need to change together:
    quantities, same entry prices. NO `name` field. These two arrays must
    always match exactly, or the live value and the logged history diverge.
 3. **`CLOSED_POSITIONS` array in `script.js`** — only when something is fully
-   closed (not for a live position's size just changing).
+   closed (not for a live position's size just changing). A close adds a
+   `Closed` entry plus a separate `Trimmed` entry for each earlier trim of
+   that position (see below).
 
 **Before touching these files, verify the trade math with actual code
 execution** (python/node), not by eyeballing it. Confirm sells roughly fund
@@ -43,16 +45,28 @@ not just look plausible.
 
 - **Weight is computed from ENTRY price × quantity, not current price.** This
   is deliberate — it reflects sizing decisions, not day-to-day price noise.
-- If a position is being fully closed *after* an earlier partial trim in the
-  **same holding period**, merge both tranches into ONE entry (see `MU`,
-  `AXTI`, `LITE` as examples): one `buys` array for the original full
-  position, one `sells` array with each tranche as its own line, `status:
-  'Closed'`, and the date of the *final* closing trade.
+- **Trims are always their own entries — never merge a trim into the closing
+  entry.** (Valerio's rule, 2026-10-02.) When a position is fully closed
+  after earlier trims, add one `status: 'Trimmed'` entry per trim and one
+  `status: 'Closed'` entry for the final sale only. Each entry has its own
+  date, its `buys` is just the shares that entry sold (at the position's
+  entry price), and its `sells` is that one fill. See the `VIAV` entries
+  (Aug 28 trim, Oct 2 close) and the `BE` entries (Sept 9 trim, Sept 21
+  close). Older entries (`MU`, `AXTI`, `LITE`, and the Aug 25 `MRVL`) were
+  recorded before this rule and still bundle their trims with the final
+  sale — leave them as they are unless asked.
+- **The repo does not store trim sale prices** (positions only keep size and
+  entry price). Before adding a closed entry, check the git history of that
+  ticker's `POSITIONS` line in `api/quotes.js` for size drops with an
+  unchanged entry price (`git log -G"'TICKER'" -- api/quotes.js`). Each drop
+  is a trim. Ask Valerio for each trim's fill price and date from the
+  TradingView order history instead of guessing. Skipping this once left the
+  `BE` trim out of the record.
 - If a ticker is being closed that was **also closed once before at a
   genuinely different time** (a full re-entry, not a continuous holding),
-  add a SEPARATE entry instead of merging — see the two `MRVL` entries
-  (closed Aug 25, re-bought, closed again Sept 9). Both stay in the array as
-  their own accurate historical record.
+  add a SEPARATE entry, since a re-entry is its own holding. See the two
+  `MRVL` entries (closed Aug 25, re-bought, closed again Sept 9). Both stay
+  in the array as their own accurate historical record.
 - "Recently Closed" on the page shows only the **3 most recent** by date
   (`MAX_SHOWN` in `renderClosedPositions`), sorted by recency not
   performance. This is deliberate — don't change it to show more or sort by

@@ -310,21 +310,15 @@ const CLOSED_POSITIONS = [
     ticker: 'VIAV',
     status: 'Closed',
     date: '2026-10-02',
-    buys: [{ qty: 260.6, price: 43.02 }],
-    sells: [
-      { qty: 103, price: 37.41 },
-      { qty: 157.6, price: 47.21 },
-    ],
+    buys: [{ qty: 157.6, price: 43.02 }],
+    sells: [{ qty: 157.6, price: 47.21 }],
   },
   {
     ticker: 'BE',
     status: 'Closed',
     date: '2026-09-21',
-    buys: [{ qty: 77.23, price: 213.90 }],
-    sells: [
-      { qty: 30, price: 278.14 },
-      { qty: 47.23, price: 275.79 },
-    ],
+    buys: [{ qty: 47.23, price: 213.90 }],
+    sells: [{ qty: 47.23, price: 275.79 }],
   },
   {
     ticker: 'SILC',
@@ -339,6 +333,13 @@ const CLOSED_POSITIONS = [
     date: '2026-09-09',
     buys: [{ qty: 70, price: 222.50 }],
     sells: [{ qty: 70, price: 232.46 }],
+  },
+  {
+    ticker: 'BE',
+    status: 'Trimmed',
+    date: '2026-09-09',
+    buys: [{ qty: 30, price: 213.90 }],
+    sells: [{ qty: 30, price: 278.14 }],
   },
   {
     ticker: 'CRWD',
@@ -356,6 +357,13 @@ const CLOSED_POSITIONS = [
     date: '2026-08-28',
     buys: [{ qty: 68.35, price: 263.37 }],
     sells: [{ qty: 68.35, price: 266.57 }],
+  },
+  {
+    ticker: 'VIAV',
+    status: 'Trimmed',
+    date: '2026-08-28',
+    buys: [{ qty: 103, price: 43.02 }],
+    sells: [{ qty: 103, price: 37.41 }],
   },
   {
     ticker: 'IREN',
