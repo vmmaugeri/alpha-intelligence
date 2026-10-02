@@ -12,9 +12,9 @@ const POSITIONS = [
   { ticker: 'AAOI', quantity: 136.64, entryPrice: 111.21 },
   { ticker: 'MU',   quantity: 21.48,  entryPrice: 1011.60 },
   { ticker: 'CIEN', quantity: 24.42,  entryPrice: 429.61 },
-  { ticker: 'VIAV', quantity: 157.6,  entryPrice: 43.02  },
   { ticker: 'SNDK', quantity: 5.77,   entryPrice: 1780.99 },
   { ticker: 'META', quantity: 12.06,  entryPrice: 708.13 },
+  { ticker: 'MRVL', quantity: 27.34,  entryPrice: 272.42 },
 ];
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;

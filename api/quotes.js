@@ -9,9 +9,9 @@ const POSITIONS = [
   { ticker: 'AAOI', name: 'Applied Optoelectronics', quantity: 136.64, entryPrice: 111.21 },
   { ticker: 'MU',   name: 'Micron Technology',      quantity: 21.48,  entryPrice: 1011.60 },
   { ticker: 'CIEN', name: 'Ciena Corporation',      quantity: 24.42,  entryPrice: 429.61 },
-  { ticker: 'VIAV', name: 'Viavi Solutions',        quantity: 157.6,  entryPrice: 43.02  },
   { ticker: 'SNDK', name: 'SanDisk Corporation',    quantity: 5.77,   entryPrice: 1780.99 },
   { ticker: 'META', name: 'Meta Platforms',         quantity: 12.06,  entryPrice: 708.13 },
+  { ticker: 'MRVL', name: 'Marvell Technology',     quantity: 27.34,  entryPrice: 272.42 },
 ];
 
 const ENTRY_VALUE = POSITIONS.reduce((sum, p) => sum + p.quantity * p.entryPrice, 0);
