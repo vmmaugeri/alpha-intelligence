@@ -492,15 +492,149 @@ function renderClosedPositions() {
 }
 
 // --- Allocation pie chart ---
-// Slices use the same entry-based weight as the positions list.
-const PIE_COLORS = [
-  '#6E8259', '#C79A5B', '#5E7D8A', '#B8734F', '#8E7A9E',
-  '#A2A66A', '#4F6F63', '#D0A99A', '#8F8A7C', '#B79E7E',
-];
+// Outline-only pie drawn at a tilt, no colors. Slice size is the same entry-based weight as the
+// positions list. Each ticker sits inside its slice when it fits; when a slice is too small, a
+// leader line points from the slice to the ticker outside the pie.
+const PIE_TILT = 0.7; // vertical squash of the circle (smaller = more tilted)
+const PIE_DEPTH = 12; // thickness of the pie's edge in px
+const PIE_INK = '#33322E';
+const PIE_MUTED = '#8F8A7C';
 
 let pieState = null;
 let pieHover = null;
 let pieSignature = null;
+
+function layoutPie(positions, width, height, ctx) {
+  const total = positions.reduce((sum, p) => sum + p.weight, 0);
+  if (!(total > 0)) return null;
+
+  const k = PIE_TILT;
+  const fontSize = width >= 440 ? 14 : 11.5;
+  const font = `500 ${fontSize}px Raleway, sans-serif`;
+  ctx.font = font;
+  const textH = fontSize * 0.72;
+  const textW = positions.map((p) => ctx.measureText(p.ticker).width);
+
+  let angle = -Math.PI / 2;
+  const slices = positions.map((p) => {
+    const start = angle;
+    angle += (p.weight / total) * Math.PI * 2;
+    return { start, end: angle, mid: (start + angle) / 2 };
+  });
+
+  // Everything is laid out around the pie's centre at (0, 0) and shifted into the canvas at the end.
+  const place = (R) => {
+    // True when a padded ticker box centred on (x, y) lies entirely inside slice s.
+    const fits = (s, x, y, hw, hh) =>
+      [-1, 0, 1].every((ix) =>
+        [-1, 0, 1].every((iy) => {
+          const u = (x + ix * hw) / R;
+          const v = (y + iy * hh) / (R * k);
+          if (Math.hypot(u, v) > 0.97) return false;
+          let a = Math.atan2(v, u);
+          if (a < -Math.PI / 2) a += Math.PI * 2;
+          return a >= s.start && a <= s.end;
+        })
+      );
+
+    const labels = slices.map((s, i) => {
+      const ux = Math.cos(s.mid);
+      const uy = Math.sin(s.mid);
+      const hw = textW[i] / 2 + 4;
+      const hh = textH / 2 + 4;
+      for (const f of [0.66, 0.74, 0.58, 0.82, 0.5]) {
+        const x = ux * f * R;
+        const y = uy * f * R * k;
+        if (fits(s, x, y, hw, hh)) return { inside: true, align: 'center', tx: x, ty: y };
+      }
+      // Too small: a dot inside the slice, a line out past the rim, then the ticker.
+      const ex = ux * 1.1 * R;
+      const ey = uy * 1.1 * R * k + (uy > 0 ? PIE_DEPTH : 0);
+      const label = { inside: false, w: textW[i], top: uy < 0, ax: ux * 0.82 * R, ay: uy * 0.82 * R * k, ex, ey };
+      if (Math.abs(ux) < 0.25) {
+        label.align = 'center';
+        label.tx = ex;
+        label.ty = ey + (uy < 0 ? -(textH / 2 + 4) : textH / 2 + 4);
+      } else {
+        label.align = ux > 0 ? 'left' : 'right';
+        label.tx = ex + (ux > 0 ? 7 : -7);
+        label.ty = ey;
+        label.hx = ex + (ux > 0 ? 5 : -5);
+      }
+      return label;
+    });
+
+    // Keep stacked outside tickers on the same side from overlapping.
+    ['left', 'right'].forEach((side) => {
+      const group = labels.filter((l) => !l.inside && l.align === side).sort((a, b) => a.ty - b.ty);
+      for (let j = 1; j < group.length; j++) {
+        const minY = group[j - 1].ty + textH + 5;
+        if (group[j].ty < minY) {
+          group[j].ty = minY;
+          group[j].ey = minY;
+        }
+      }
+    });
+
+    // Same for tickers above or below the pie: spread them sideways, keeping the group centred.
+    [true, false].forEach((top) => {
+      const group = labels
+        .filter((l) => !l.inside && l.align === 'center' && l.top === top)
+        .sort((a, b) => a.tx - b.tx);
+      if (group.length < 2) return;
+      const before = group.map((l) => l.tx);
+      for (let j = 1; j < group.length; j++) {
+        const minX = group[j - 1].tx + (group[j - 1].w + group[j].w) / 2 + 8;
+        if (group[j].tx < minX) group[j].tx = minX;
+      }
+      const shift = group.reduce((sum, l, j) => sum + (l.tx - before[j]), 0) / group.length;
+      group.forEach((l) => {
+        l.tx -= shift;
+        l.ex = l.tx;
+      });
+    });
+
+    // Bounding box of the pie and any outside tickers.
+    let x0 = -R;
+    let x1 = R;
+    let y0 = -R * k;
+    let y1 = R * k + PIE_DEPTH;
+    labels.forEach((l, i) => {
+      if (l.inside) return;
+      const w = textW[i];
+      const lx = l.align === 'left' ? l.tx : l.align === 'right' ? l.tx - w : l.tx - w / 2;
+      x0 = Math.min(x0, lx);
+      x1 = Math.max(x1, lx + w);
+      y0 = Math.min(y0, l.ty - textH / 2);
+      y1 = Math.max(y1, l.ty + textH / 2);
+    });
+    return { labels, x0, x1, y0, y1, ok: x1 - x0 <= width - 4 && y1 - y0 <= height - 4 };
+  };
+
+  // Start as large as the canvas allows and shrink until any outside tickers fit too.
+  let R = Math.min((width - 4) / 2, (height - PIE_DEPTH - 4) / (2 * k));
+  let placed = place(R);
+  while (!placed.ok && R > 60) {
+    R -= 3;
+    placed = place(R);
+  }
+
+  // Centre the whole drawing (pie plus outside tickers) in the canvas.
+  const dx = (width - (placed.x1 - placed.x0)) / 2 - placed.x0;
+  const dy = (height - (placed.y1 - placed.y0)) / 2 - placed.y0;
+  placed.labels.forEach((l) => {
+    l.tx += dx;
+    l.ty += dy;
+    if (!l.inside) {
+      l.ax += dx;
+      l.ay += dy;
+      l.ex += dx;
+      l.ey += dy;
+      if (l.hx != null) l.hx += dx;
+    }
+  });
+  return { cx: dx, cy: dy, R, k, font, textH, slices, labels: placed.labels };
+}
 
 function drawPie(positions, hoverIndex) {
   const canvas = document.getElementById('pie');
@@ -513,64 +647,102 @@ function drawPie(positions, hoverIndex) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, width, height);
+  if (width < 120 || height < 80) return;
 
-  const total = positions.reduce((sum, p) => sum + p.weight, 0);
-  if (!(total > 0)) return;
+  const layout = layoutPie(positions, width, height, ctx);
+  if (!layout) return;
+  const { cx, cy, R, k, font, textH, slices, labels } = layout;
+  const rimX = (a) => cx + Math.cos(a) * R;
+  const rimY = (a) => cy + Math.sin(a) * R * k;
+  const dimmed = hoverIndex != null && slices[hoverIndex] != null;
 
-  const cx = width / 2;
-  const cy = height / 2;
-  const radius = Math.min(width, height) / 2 - 6;
-  if (radius <= 0) return;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = PIE_INK;
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = dimmed ? 0.45 : 1;
 
-  let angle = -Math.PI / 2;
-  const slices = positions.map((p, i) => {
-    const start = angle;
-    angle += (p.weight / total) * Math.PI * 2;
-    return { start, end: angle, mid: (start + angle) / 2, color: PIE_COLORS[i % PIE_COLORS.length] };
+  // Edge of the pie: the front rim, both sides, and a short drop at each slice boundary on the front.
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + PIE_DEPTH, R, R * k, 0, 0, Math.PI);
+  ctx.moveTo(cx - R, cy);
+  ctx.lineTo(cx - R, cy + PIE_DEPTH);
+  ctx.moveTo(cx + R, cy);
+  ctx.lineTo(cx + R, cy + PIE_DEPTH);
+  slices.forEach((s) => {
+    if (Math.sin(s.start) > 0.02) {
+      ctx.moveTo(rimX(s.start), rimY(s.start));
+      ctx.lineTo(rimX(s.start), rimY(s.start) + PIE_DEPTH);
+    }
   });
+  ctx.stroke();
 
-  const paintSlice = (s, popped) => {
-    const x = cx + (popped ? Math.cos(s.mid) * 4 : 0);
-    const y = cy + (popped ? Math.sin(s.mid) * 4 : 0);
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.arc(x, y, radius, s.start, s.end);
-    ctx.closePath();
-    ctx.fillStyle = s.color;
-    ctx.fill();
-    ctx.strokeStyle = '#F7F1E3';
+  // Top face: the outline and one divider per slice.
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, R, R * k, 0, 0, Math.PI * 2);
+  if (slices.length > 1) {
+    slices.forEach((s) => {
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(rimX(s.start), rimY(s.start));
+    });
+  }
+  ctx.stroke();
+
+  if (dimmed) {
+    const s = slices[hoverIndex];
+    ctx.globalAlpha = 1;
     ctx.lineWidth = 2;
-    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(rimX(s.start), rimY(s.start));
+    ctx.ellipse(cx, cy, R, R * k, 0, s.start, s.end);
+    ctx.closePath();
     ctx.stroke();
-  };
+  }
 
-  slices.forEach((s, i) => {
-    if (i !== hoverIndex) paintSlice(s, false);
+  ctx.font = font;
+  ctx.textBaseline = 'alphabetic';
+  labels.forEach((l, i) => {
+    ctx.globalAlpha = dimmed && i !== hoverIndex ? 0.45 : 1;
+    if (!l.inside) {
+      ctx.strokeStyle = PIE_MUTED;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(l.ax, l.ay);
+      ctx.lineTo(l.ex, l.ey);
+      if (l.hx != null) ctx.lineTo(l.hx, l.ey);
+      ctx.stroke();
+      ctx.fillStyle = PIE_INK;
+      ctx.beginPath();
+      ctx.arc(l.ax, l.ay, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = PIE_INK;
+    ctx.textAlign = l.align;
+    ctx.fillText(positions[i].ticker, l.tx, l.ty + textH / 2);
   });
-  if (hoverIndex != null && slices[hoverIndex]) paintSlice(slices[hoverIndex], true);
+  ctx.globalAlpha = 1;
 
-  pieState = { positions, slices, cx, cy, radius };
+  pieState = { positions, slices, cx, cy, R, k };
 }
 
 function pieIndexAt(x, y) {
   if (!pieState) return null;
-  const dx = x - pieState.cx;
-  const dy = y - pieState.cy;
-  if (Math.hypot(dx, dy) > pieState.radius + 4) return null;
-  let a = Math.atan2(dy, dx);
+  const u = (x - pieState.cx) / pieState.R;
+  const v = (y - pieState.cy) / (pieState.R * pieState.k);
+  if (Math.hypot(u, v) > 1) return null;
+  let a = Math.atan2(v, u);
   if (a < -Math.PI / 2) a += Math.PI * 2;
   const i = pieState.slices.findIndex((s) => a >= s.start && a < s.end);
   return i === -1 ? null : i;
 }
 
-function highlightPie(index) {
-  if (!pieState || index === pieHover) return;
-  pieHover = index;
-  drawPie(pieState.positions, index);
-
-  document.querySelectorAll('#pieLegend li').forEach((li, i) => {
-    li.classList.toggle('dim', index != null && i !== index);
-  });
+function setPieHover(index, x, y) {
+  if (!pieState) return;
+  if (index !== pieHover) {
+    pieHover = index;
+    drawPie(pieState.positions, index);
+  }
 
   const tooltip = document.getElementById('pieTooltip');
   if (!tooltip) return;
@@ -579,54 +751,34 @@ function highlightPie(index) {
     return;
   }
   const p = pieState.positions[index];
-  const s = pieState.slices[index];
   tooltip.textContent = `${p.ticker} — ${p.weight.toFixed(1)}%`;
-  tooltip.style.left = pieState.cx + Math.cos(s.mid) * pieState.radius * 0.62 + 'px';
-  tooltip.style.top = pieState.cy + Math.sin(s.mid) * pieState.radius * 0.62 + 'px';
+  tooltip.style.left = x + 'px';
+  tooltip.style.top = y + 'px';
   tooltip.style.opacity = '1';
 }
 
 function renderPie(positions) {
   const section = document.getElementById('allocation');
-  const list = document.getElementById('pieLegend');
   const canvas = document.getElementById('pie');
-  if (!section || !list || !canvas) return;
+  if (!section || !canvas) return;
   section.hidden = positions.length === 0;
   if (positions.length === 0) return;
 
-  // Weights only change on a rebalance, so redraw only when the data or the canvas size changes.
+  // Weights only change on a rebalance, so redraw only when the data, the canvas size or the font changes.
   const signature = [
     positions.map((p) => `${p.ticker}:${p.weight.toFixed(4)}`).join('|'),
     canvas.clientWidth,
     canvas.clientHeight,
     window.devicePixelRatio || 1,
+    document.fonts && document.fonts.check ? document.fonts.check('500 13px Raleway') : '',
   ].join('/');
   if (signature === pieSignature) return;
   pieSignature = signature;
 
-  list.innerHTML = '';
-  positions.forEach((p, i) => {
-    const li = document.createElement('li');
-
-    const swatch = document.createElement('span');
-    swatch.className = 'pie-swatch';
-    swatch.style.background = PIE_COLORS[i % PIE_COLORS.length];
-
-    const ticker = document.createElement('span');
-    ticker.className = 'pie-ticker';
-    ticker.textContent = p.ticker;
-
-    const weight = document.createElement('span');
-    weight.className = 'pie-weight';
-    weight.textContent = `${Math.round(p.weight)}%`;
-
-    li.appendChild(swatch);
-    li.appendChild(ticker);
-    li.appendChild(weight);
-    li.addEventListener('mouseenter', () => highlightPie(i));
-    li.addEventListener('mouseleave', () => highlightPie(null));
-    list.appendChild(li);
-  });
+  canvas.setAttribute(
+    'aria-label',
+    'Pie chart of portfolio weights: ' + positions.map((p) => `${p.ticker} ${Math.round(p.weight)}%`).join(', ')
+  );
 
   pieHover = null;
   const tooltip = document.getElementById('pieTooltip');
@@ -640,10 +792,19 @@ function attachPieInteractivity() {
 
   canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
-    highlightPie(pieIndexAt(e.clientX - rect.left, e.clientY - rect.top));
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setPieHover(pieIndexAt(x, y), x, y);
   });
 
-  canvas.addEventListener('mouseleave', () => highlightPie(null));
+  canvas.addEventListener('mouseleave', () => setPieHover(null));
+
+  // Ticker widths decide what fits inside a slice, so redraw once the web font is in.
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => {
+      if (pieState) drawPie(pieState.positions, pieHover);
+    });
+  }
 }
 
 function attachRangeButtons() {
