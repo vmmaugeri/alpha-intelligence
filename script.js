@@ -491,6 +491,161 @@ function renderClosedPositions() {
   });
 }
 
+// --- Allocation pie chart ---
+// Slices use the same entry-based weight as the positions list.
+const PIE_COLORS = [
+  '#6E8259', '#C79A5B', '#5E7D8A', '#B8734F', '#8E7A9E',
+  '#A2A66A', '#4F6F63', '#D0A99A', '#8F8A7C', '#B79E7E',
+];
+
+let pieState = null;
+let pieHover = null;
+let pieSignature = null;
+
+function drawPie(positions, hoverIndex) {
+  const canvas = document.getElementById('pie');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+
+  const total = positions.reduce((sum, p) => sum + p.weight, 0);
+  if (!(total > 0)) return;
+
+  const cx = width / 2;
+  const cy = height / 2;
+  const radius = Math.min(width, height) / 2 - 6;
+  if (radius <= 0) return;
+
+  let angle = -Math.PI / 2;
+  const slices = positions.map((p, i) => {
+    const start = angle;
+    angle += (p.weight / total) * Math.PI * 2;
+    return { start, end: angle, mid: (start + angle) / 2, color: PIE_COLORS[i % PIE_COLORS.length] };
+  });
+
+  const paintSlice = (s, popped) => {
+    const x = cx + (popped ? Math.cos(s.mid) * 4 : 0);
+    const y = cy + (popped ? Math.sin(s.mid) * 4 : 0);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.arc(x, y, radius, s.start, s.end);
+    ctx.closePath();
+    ctx.fillStyle = s.color;
+    ctx.fill();
+    ctx.strokeStyle = '#F7F1E3';
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  };
+
+  slices.forEach((s, i) => {
+    if (i !== hoverIndex) paintSlice(s, false);
+  });
+  if (hoverIndex != null && slices[hoverIndex]) paintSlice(slices[hoverIndex], true);
+
+  pieState = { positions, slices, cx, cy, radius };
+}
+
+function pieIndexAt(x, y) {
+  if (!pieState) return null;
+  const dx = x - pieState.cx;
+  const dy = y - pieState.cy;
+  if (Math.hypot(dx, dy) > pieState.radius + 4) return null;
+  let a = Math.atan2(dy, dx);
+  if (a < -Math.PI / 2) a += Math.PI * 2;
+  const i = pieState.slices.findIndex((s) => a >= s.start && a < s.end);
+  return i === -1 ? null : i;
+}
+
+function highlightPie(index) {
+  if (!pieState || index === pieHover) return;
+  pieHover = index;
+  drawPie(pieState.positions, index);
+
+  document.querySelectorAll('#pieLegend li').forEach((li, i) => {
+    li.classList.toggle('dim', index != null && i !== index);
+  });
+
+  const tooltip = document.getElementById('pieTooltip');
+  if (!tooltip) return;
+  if (index == null) {
+    tooltip.style.opacity = '0';
+    return;
+  }
+  const p = pieState.positions[index];
+  const s = pieState.slices[index];
+  tooltip.textContent = `${p.ticker} — ${p.weight.toFixed(1)}%`;
+  tooltip.style.left = pieState.cx + Math.cos(s.mid) * pieState.radius * 0.62 + 'px';
+  tooltip.style.top = pieState.cy + Math.sin(s.mid) * pieState.radius * 0.62 + 'px';
+  tooltip.style.opacity = '1';
+}
+
+function renderPie(positions) {
+  const section = document.getElementById('allocation');
+  const list = document.getElementById('pieLegend');
+  const canvas = document.getElementById('pie');
+  if (!section || !list || !canvas) return;
+  section.hidden = positions.length === 0;
+  if (positions.length === 0) return;
+
+  // Weights only change on a rebalance, so redraw only when the data or the canvas size changes.
+  const signature = [
+    positions.map((p) => `${p.ticker}:${p.weight.toFixed(4)}`).join('|'),
+    canvas.clientWidth,
+    canvas.clientHeight,
+    window.devicePixelRatio || 1,
+  ].join('/');
+  if (signature === pieSignature) return;
+  pieSignature = signature;
+
+  list.innerHTML = '';
+  positions.forEach((p, i) => {
+    const li = document.createElement('li');
+
+    const swatch = document.createElement('span');
+    swatch.className = 'pie-swatch';
+    swatch.style.background = PIE_COLORS[i % PIE_COLORS.length];
+
+    const ticker = document.createElement('span');
+    ticker.className = 'pie-ticker';
+    ticker.textContent = p.ticker;
+
+    const weight = document.createElement('span');
+    weight.className = 'pie-weight';
+    weight.textContent = `${Math.round(p.weight)}%`;
+
+    li.appendChild(swatch);
+    li.appendChild(ticker);
+    li.appendChild(weight);
+    li.addEventListener('mouseenter', () => highlightPie(i));
+    li.addEventListener('mouseleave', () => highlightPie(null));
+    list.appendChild(li);
+  });
+
+  pieHover = null;
+  const tooltip = document.getElementById('pieTooltip');
+  if (tooltip) tooltip.style.opacity = '0';
+  drawPie(positions, null);
+}
+
+function attachPieInteractivity() {
+  const canvas = document.getElementById('pie');
+  if (!canvas) return;
+
+  canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    highlightPie(pieIndexAt(e.clientX - rect.left, e.clientY - rect.top));
+  });
+
+  canvas.addEventListener('mouseleave', () => highlightPie(null));
+}
+
 function attachRangeButtons() {
   const buttons = document.querySelectorAll('.range-btn');
   buttons.forEach((btn) => {
@@ -579,6 +734,12 @@ async function init() {
       setMover(document.getElementById('loserValue'), loser);
     }
 
+    try {
+      renderPie(data.positions);
+    } catch (pieErr) {
+      console.error(pieErr);
+    }
+
     document.getElementById('updated').textContent =
       'Updated ' + new Date(data.updatedAt).toLocaleString();
   } catch (err) {
@@ -594,6 +755,7 @@ async function tick() {
 
 tick();
 attachChartInteractivity();
+attachPieInteractivity();
 attachRangeButtons();
 renderClosedPositions();
 
