@@ -445,6 +445,16 @@ h1 {
   font-weight: 500;
 }
 
+a.bench-label {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+a.bench-label:hover,
+a.bench-label:focus-visible {
+  color: var(--accent);
+}
+
 .bench-name {
   display: flex;
   align-items: baseline;

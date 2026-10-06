@@ -817,6 +817,77 @@ function attachPieInteractivity() {
 // --- Benchmarks and alpha ---
 // Alpha is the portfolio's return since the Aug 1 start minus each benchmark's return over the same
 // period, in percentage points. It is computed from the rounded figures shown, so the table adds up.
+// Refreshed on the same 20 second tick as everything else, from the same /api/quotes snapshot.
+let benchKey = null;
+
+const benchRound = (x) => Math.round(x * 10) / 10;
+const benchSigned = (x) => `${x >= 0 ? '+' : ''}${x.toFixed(1)}`;
+
+function buildBenchRow(row) {
+  const li = document.createElement('li');
+  if (row.alpha === null) li.className = 'self';
+
+  const name = document.createElement('span');
+  name.className = 'bench-name';
+
+  let label;
+  if (row.symbol) {
+    label = document.createElement('a');
+    label.href = `https://finance.yahoo.com/quote/${row.symbol}`;
+    label.target = '_blank';
+    label.rel = 'noopener';
+  } else {
+    label = document.createElement('span');
+  }
+  label.className = 'bench-label';
+  label.textContent = row.label;
+  name.appendChild(label);
+
+  if (row.desc) {
+    const desc = document.createElement('span');
+    desc.className = 'bench-desc';
+    desc.textContent = row.desc;
+    name.appendChild(desc);
+  }
+
+  const right = document.createElement('span');
+  right.className = 'bench-right';
+
+  const ret = document.createElement('span');
+  ret.className = 'bench-ret';
+
+  const alpha = document.createElement('span');
+  alpha.className = 'bench-alpha';
+  const alphaValue = document.createElement('span');
+  alphaValue.className = 'bench-alpha-val';
+  alpha.appendChild(alphaValue);
+  if (row.alpha === null) {
+    alpha.classList.add('none');
+    alphaValue.textContent = '—';
+  } else {
+    const unit = document.createElement('span');
+    unit.className = 'bench-unit';
+    unit.textContent = ' pts';
+    alpha.appendChild(unit);
+  }
+
+  right.appendChild(ret);
+  right.appendChild(alpha);
+  li.appendChild(name);
+  li.appendChild(right);
+  return li;
+}
+
+function updateBenchRow(li, row) {
+  const ret = li.querySelector('.bench-ret');
+  ret.textContent = `${benchSigned(row.pct)}%`;
+  ret.classList.toggle('negative', row.pct < 0);
+  if (row.alpha !== null) {
+    li.querySelector('.bench-alpha-val').textContent = benchSigned(row.alpha);
+    li.querySelector('.bench-alpha').classList.toggle('negative', row.alpha < 0);
+  }
+}
+
 function renderBenchmarks(data) {
   const section = document.getElementById('benchmarks');
   const list = document.getElementById('benchList');
@@ -828,64 +899,24 @@ function renderBenchmarks(data) {
     return;
   }
 
-  const round1 = (x) => Math.round(x * 10) / 10;
-  const fmt = (x) => `${x >= 0 ? '+' : ''}${x.toFixed(1)}`;
-  const portfolioPct = round1(((data.currentValue - data.trueOriginValue) / data.trueOriginValue) * 100);
-
+  const portfolioPct = benchRound(((data.currentValue - data.trueOriginValue) / data.trueOriginValue) * 100);
   const rows = [
     { label: 'Portfolio', desc: '', pct: portfolioPct, alpha: null },
     ...benchmarks.map((b) => {
-      const pct = round1(b.returnPct);
-      return { label: b.symbol, desc: b.name, pct, alpha: round1(portfolioPct - pct) };
+      const pct = benchRound(b.returnPct);
+      return { label: b.symbol, symbol: b.symbol, desc: b.name, pct, alpha: benchRound(portfolioPct - pct) };
     }),
   ];
 
-  list.innerHTML = '';
-  rows.forEach((row) => {
-    const li = document.createElement('li');
-    if (row.alpha === null) li.className = 'self';
-
-    const name = document.createElement('span');
-    name.className = 'bench-name';
-    const label = document.createElement('span');
-    label.className = 'bench-label';
-    label.textContent = row.label;
-    name.appendChild(label);
-    if (row.desc) {
-      const desc = document.createElement('span');
-      desc.className = 'bench-desc';
-      desc.textContent = row.desc;
-      name.appendChild(desc);
-    }
-
-    const right = document.createElement('span');
-    right.className = 'bench-right';
-
-    const ret = document.createElement('span');
-    ret.className = 'bench-ret';
-    ret.textContent = `${fmt(row.pct)}%`;
-    ret.classList.toggle('negative', row.pct < 0);
-
-    const alpha = document.createElement('span');
-    alpha.className = 'bench-alpha';
-    if (row.alpha === null) {
-      alpha.classList.add('none');
-      alpha.textContent = '—';
-    } else {
-      alpha.textContent = `${fmt(row.alpha)} `;
-      const unit = document.createElement('span');
-      unit.className = 'bench-unit';
-      unit.textContent = 'pts';
-      alpha.appendChild(unit);
-      alpha.classList.toggle('negative', row.alpha < 0);
-    }
-
-    right.appendChild(ret);
-    right.appendChild(alpha);
-    li.appendChild(name);
-    li.appendChild(right);
-    list.appendChild(li);
-  });
+  // Rebuild the rows only when the set of benchmarks changes. Otherwise just update the numbers in
+  // place, so the links keep keyboard focus and hover state through the 20 second refresh.
+  const key = rows.map((r) => r.label).join('|');
+  if (key !== benchKey) {
+    benchKey = key;
+    list.innerHTML = '';
+    rows.forEach((row) => list.appendChild(buildBenchRow(row)));
+  }
+  rows.forEach((row, i) => updateBenchRow(list.children[i], row));
 
   section.hidden = false;
 }
