@@ -814,6 +814,82 @@ function attachPieInteractivity() {
   }
 }
 
+// --- Benchmarks and alpha ---
+// Alpha is the portfolio's return since the Aug 1 start minus each benchmark's return over the same
+// period, in percentage points. It is computed from the rounded figures shown, so the table adds up.
+function renderBenchmarks(data) {
+  const section = document.getElementById('benchmarks');
+  const list = document.getElementById('benchList');
+  if (!section || !list) return;
+
+  const benchmarks = data.benchmarks || [];
+  if (benchmarks.length === 0 || !data.trueOriginValue) {
+    section.hidden = true;
+    return;
+  }
+
+  const round1 = (x) => Math.round(x * 10) / 10;
+  const fmt = (x) => `${x >= 0 ? '+' : ''}${x.toFixed(1)}`;
+  const portfolioPct = round1(((data.currentValue - data.trueOriginValue) / data.trueOriginValue) * 100);
+
+  const rows = [
+    { label: 'Portfolio', desc: '', pct: portfolioPct, alpha: null },
+    ...benchmarks.map((b) => {
+      const pct = round1(b.returnPct);
+      return { label: b.symbol, desc: b.name, pct, alpha: round1(portfolioPct - pct) };
+    }),
+  ];
+
+  list.innerHTML = '';
+  rows.forEach((row) => {
+    const li = document.createElement('li');
+    if (row.alpha === null) li.className = 'self';
+
+    const name = document.createElement('span');
+    name.className = 'bench-name';
+    const label = document.createElement('span');
+    label.className = 'bench-label';
+    label.textContent = row.label;
+    name.appendChild(label);
+    if (row.desc) {
+      const desc = document.createElement('span');
+      desc.className = 'bench-desc';
+      desc.textContent = row.desc;
+      name.appendChild(desc);
+    }
+
+    const right = document.createElement('span');
+    right.className = 'bench-right';
+
+    const ret = document.createElement('span');
+    ret.className = 'bench-ret';
+    ret.textContent = `${fmt(row.pct)}%`;
+    ret.classList.toggle('negative', row.pct < 0);
+
+    const alpha = document.createElement('span');
+    alpha.className = 'bench-alpha';
+    if (row.alpha === null) {
+      alpha.classList.add('none');
+      alpha.textContent = '—';
+    } else {
+      alpha.textContent = `${fmt(row.alpha)} `;
+      const unit = document.createElement('span');
+      unit.className = 'bench-unit';
+      unit.textContent = 'pts';
+      alpha.appendChild(unit);
+      alpha.classList.toggle('negative', row.alpha < 0);
+    }
+
+    right.appendChild(ret);
+    right.appendChild(alpha);
+    li.appendChild(name);
+    li.appendChild(right);
+    list.appendChild(li);
+  });
+
+  section.hidden = false;
+}
+
 function attachRangeButtons() {
   const buttons = document.querySelectorAll('.range-btn');
   buttons.forEach((btn) => {
@@ -906,6 +982,12 @@ async function init() {
       renderPie(data.positions);
     } catch (pieErr) {
       console.error(pieErr);
+    }
+
+    try {
+      renderBenchmarks(data);
+    } catch (benchErr) {
+      console.error(benchErr);
     }
 
     document.getElementById('updated').textContent =

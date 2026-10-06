@@ -31,6 +31,16 @@ const DISPLAY_START_TIMESTAMP = '2026-08-12T19:45:00Z'; // Aug 12, 3:45pm ET
 
 const TRUE_ORIGIN_VALUE = 100003.31;
 
+// Benchmarks the portfolio is compared against. Each baseline is the Aug 3, 2026 OPEN, not the Jul 31
+// close: the portfolio's first orders filled right around Monday's open (the average fills for
+// MU/NBIS/MRVL/LITE landed within ~0.8% of it), so that is where a fair comparison has to start.
+// Starting from the Jul 31 close would add Monday's gap to the benchmark's return (SMH opened 1.9%
+// lower) and flatter the alpha. Fixed forever, like TRUE_ORIGIN_VALUE.
+const BENCHMARKS = [
+  { symbol: 'SMH', name: 'Semiconductors', baseline: 530.43 },
+  { symbol: 'QQQ', name: 'Nasdaq-100',     baseline: 688.30 },
+];
+
 const PORTFOLIO_HISTORICAL_CLOSES = [
   { t: '2026-08-01T00:00:00Z', value: 100003.31 },
   { t: '2026-08-03T20:00:00Z', value: 109333.05 },
@@ -149,6 +159,31 @@ function mergeRecovered(liveHistory, recovered) {
   return [...before, ...recovered, ...after];
 }
 
+// Live benchmark returns since the baseline. Never throws: if a quote fails or comes back empty, that
+// benchmark is left out, so a problem here can't take the portfolio's own numbers down with it.
+async function fetchBenchmarks(apiKey) {
+  try {
+    const rows = await Promise.all(
+      BENCHMARKS.map(async (b) => {
+        const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${b.symbol}&token=${apiKey}`);
+        if (!r.ok) return null;
+        const data = await r.json();
+        if (!data || !data.c) return null;
+        return {
+          symbol: b.symbol,
+          name: b.name,
+          baseline: b.baseline,
+          currentPrice: data.c,
+          returnPct: ((data.c - b.baseline) / b.baseline) * 100,
+        };
+      })
+    );
+    return rows.filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 module.exports = async (req, res) => {
   const apiKey = process.env.FINNHUB_API_KEY;
 
@@ -158,6 +193,8 @@ module.exports = async (req, res) => {
   }
 
   try {
+    const benchmarksPromise = fetchBenchmarks(apiKey);
+
     const quotes = await Promise.all(
       POSITIONS.map(async (p) => {
         const r = await fetch(
@@ -194,6 +231,8 @@ module.exports = async (req, res) => {
       }))
       .sort((a, b) => b.weight - a.weight);
 
+    const benchmarks = await benchmarksPromise;
+
     res.setHeader('Cache-Control', 's-maxage=20, stale-while-revalidate=10');
     res.status(200).json({
       currentValue,
@@ -201,6 +240,7 @@ module.exports = async (req, res) => {
       trueOriginValue: TRUE_ORIGIN_VALUE,
       allTimeReturnPct,
       positions,
+      benchmarks,
       history,
       updatedAt: new Date().toISOString(),
     });

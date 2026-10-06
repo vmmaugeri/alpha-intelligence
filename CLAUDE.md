@@ -103,10 +103,32 @@ touching any of it:
   cover — mostly superseded now, but still load-bearing for the earliest
   dates.
 
+## Benchmarks and alpha (SMH, QQQ)
+
+- `BENCHMARKS` in `api/quotes.js` holds one fixed baseline price per ETF: the
+  **Aug 3, 2026 open** (SMH 530.43, QQQ 688.30), not the Jul 31 close. The
+  portfolio's first orders were limit orders at the Jul 31 close that filled
+  right around Monday's open (the average fills for MU, NBIS, MRVL and LITE
+  landed within ~0.8% of it), so that is where a fair comparison starts.
+  Using the Jul 31 close would add Monday's gap to the benchmark (SMH opened
+  1.9% lower) and flatter the alpha by ~2 points. The baselines never change.
+- Live ETF prices come from Finnhub inside the same `/api/quotes` request, in
+  their own try/catch: if a benchmark quote fails, that row is left out and
+  the portfolio's own numbers are unaffected.
+- **Alpha = the portfolio's return since the Aug 1 start minus the
+  benchmark's, in percentage points.** The portfolio return is
+  `currentValue` against `TRUE_ORIGIN_VALUE` (never `ENTRY_VALUE`). The page
+  computes it from the rounded figures it shows so the table adds up. This is
+  simple excess return, not a risk-adjusted alpha, so say so if it goes in
+  the newsletter.
+- To add a benchmark, add a row to `BENCHMARKS` with that ETF's Aug 3, 2026
+  opening price.
+
 ## Known gotchas (already debugged once — don't rediscover these)
 
-- **Finnhub free tier caps at 60 calls/min.** This site uses ~9 calls per
-  page load. Multiple tabs/windows open at once, plus the cron job's own
+- **Finnhub free tier caps at 60 calls/min.** This site uses ~12 calls
+  per page load (one per position plus the two benchmark ETFs). Multiple
+  tabs/windows open at once, plus the cron job's own
   pings, can trip the limit — which then serves a *frozen, identical* quote
   instead of an error. If prices ever look stuck, check `/api/debug-history`
   for a repeating value before assuming the code is broken.
