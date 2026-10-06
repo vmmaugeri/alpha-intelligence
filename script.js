@@ -473,8 +473,11 @@ function renderClosedPositions() {
     const name = document.createElement('span');
     name.className = 'closed-name';
 
-    const ticker = document.createElement('span');
+    const ticker = document.createElement('a');
     ticker.className = 'closed-ticker';
+    ticker.href = `https://finance.yahoo.com/quote/${pos.ticker}`;
+    ticker.target = '_blank';
+    ticker.rel = 'noopener';
     ticker.textContent = pos.ticker;
 
     const status = document.createElement('span');
@@ -932,11 +935,47 @@ function attachRangeButtons() {
   });
 }
 
-function setMover(el, position) {
-  if (!el || !position) return;
-  const sign = position.dayChangePct >= 0 ? '+' : '';
-  el.textContent = `${position.ticker} ${sign}${position.dayChangePct.toFixed(1)}%`;
-  el.classList.toggle('negative', position.dayChangePct < 0);
+// A mover only counts if it moved the right way: the gainer has to be up and the loser has to be down.
+// Otherwise (say, no position went down today) it shows a dash. Only the ticker is a link, like in the
+// positions list, and the link is reused between refreshes so it keeps keyboard focus.
+function setMover(el, position, direction) {
+  if (!el) return;
+  const change = position ? position.dayChangePct : null;
+  const qualifies = direction === 'up' ? change > 0 : change < 0;
+
+  if (!qualifies) {
+    el.textContent = '—';
+    el.classList.remove('negative');
+    el.classList.add('none');
+    return;
+  }
+
+  let link = el.querySelector('a');
+  let pct = el.querySelector('.mover-pct');
+  if (!link) {
+    el.textContent = '';
+    link = document.createElement('a');
+    link.className = 'mover-link';
+    link.target = '_blank';
+    link.rel = 'noopener';
+    pct = document.createElement('span');
+    pct.className = 'mover-pct';
+    el.appendChild(link);
+    el.appendChild(document.createTextNode(' '));
+    el.appendChild(pct);
+  }
+  link.href = `https://finance.yahoo.com/quote/${position.ticker}`;
+  link.textContent = position.ticker;
+  pct.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`;
+  el.classList.remove('none');
+  el.classList.toggle('negative', change < 0);
+}
+
+function renderMovers(positions) {
+  const best = positions.length > 0 ? positions.reduce((a, b) => (b.dayChangePct > a.dayChangePct ? b : a)) : null;
+  const worst = positions.length > 0 ? positions.reduce((a, b) => (b.dayChangePct < a.dayChangePct ? b : a)) : null;
+  setMover(document.getElementById('gainerValue'), best, 'up');
+  setMover(document.getElementById('loserValue'), worst, 'down');
 }
 
 function updateFavicon(isPositive) {
@@ -1002,12 +1041,7 @@ async function init() {
       list.appendChild(li);
     });
 
-    if (data.positions.length > 0) {
-      const gainer = data.positions.reduce((a, b) => (b.dayChangePct > a.dayChangePct ? b : a));
-      const loser = data.positions.reduce((a, b) => (b.dayChangePct < a.dayChangePct ? b : a));
-      setMover(document.getElementById('gainerValue'), gainer);
-      setMover(document.getElementById('loserValue'), loser);
-    }
+    renderMovers(data.positions);
 
     try {
       renderPie(data.positions);
