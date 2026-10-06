@@ -307,6 +307,13 @@ function attachChartInteractivity() {
 // Static historical record (no live prices needed — these are settled).
 const CLOSED_POSITIONS = [
   {
+    ticker: 'BRUN',
+    status: 'Closed',
+    date: '2026-10-06',
+    buys: [{ qty: 923.49, price: 19.88 }],
+    sells: [{ qty: 923.49, price: 15.50 }],
+  },
+  {
     ticker: 'VIAV',
     status: 'Closed',
     date: '2026-10-02',
