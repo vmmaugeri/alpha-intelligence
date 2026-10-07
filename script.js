@@ -1068,10 +1068,62 @@ async function tick() {
   updateMarketStatus();
 }
 
-tick();
+// --- Load-in ---
+// The same fade-up as the main site, top to bottom. The title block plays as soon as the font is in.
+// Everything that depends on prices waits until the first data is on the page (or 3 seconds, whichever
+// comes first), so nothing fills in while it is already visible. It runs once: the 20 second refreshes
+// afterwards just update the numbers.
+const REVEAL_STEP_MS = 50;
+let headerRevealedAt = null;
+let headerSlots = 0;
+let dataRevealed = false;
+
+function revealHeader() {
+  if (headerRevealedAt !== null) return;
+  headerRevealedAt = performance.now();
+  document.querySelectorAll('.rise-now').forEach((el, i) => {
+    el.style.setProperty('--d', `${i * REVEAL_STEP_MS}ms`);
+    el.classList.add('in');
+    headerSlots = i + 1;
+  });
+}
+
+function revealData() {
+  if (dataRevealed) return;
+  dataRevealed = true;
+  revealHeader();
+  renderChart(); // redraw now the font is in, so the axis labels use it
+
+  // Carry on from the title block, never starting earlier than now.
+  let delay = Math.max(0, headerSlots * REVEAL_STEP_MS - (performance.now() - headerRevealedAt));
+  document.querySelectorAll('.rise:not(.rise-now)').forEach((el) => {
+    if (el.hidden) {
+      el.classList.add('in'); // a section that shows up later must not be stuck invisible
+      return;
+    }
+    el.style.setProperty('--d', `${delay}ms`);
+    el.classList.add('in');
+    delay += REVEAL_STEP_MS;
+  });
+}
+
+const fontsReady = Promise.race([
+  Promise.all(
+    document.fonts && document.fonts.load
+      ? [document.fonts.load('400 16px Raleway'), document.fonts.load('500 16px Raleway')]
+      : []
+  ).catch(() => {}),
+  new Promise((resolve) => setTimeout(resolve, 800)),
+]);
+
+const firstTick = tick();
 attachChartInteractivity();
 attachPieInteractivity();
 attachRangeButtons();
 renderClosedPositions();
+
+fontsReady.then(revealHeader);
+Promise.allSettled([firstTick, fontsReady]).then(revealData);
+setTimeout(revealData, 3000);
 
 setInterval(tick, 20000);

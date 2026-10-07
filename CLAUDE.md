@@ -124,6 +124,22 @@ touching any of it:
 - To add a benchmark, add a row to `BENCHMARKS` with that ETF's Aug 3, 2026
   opening price.
 
+## Page load-in (top-to-bottom fade-up)
+
+- The page loads in with the same `fadeUp` animation as the main site
+  (valerio-site.vercel.app): 0.7s, `ease`, rising 10px, each block 50ms after
+  the one above. Every top-level block in `index.html` carries the `rise`
+  class. **A new section needs `rise` too**, or it will pop in on its own.
+- The title group (`rise rise-now`: back link, heading, subtitle) plays as soon
+  as the web font is ready. Everything else waits for the first `/api/quotes`
+  data to be on the page, then cascades in page order (`revealData` in
+  `script.js`). If the data isn't there after 3 seconds it reveals anyway. It
+  runs once; the 20 second refreshes never replay it.
+- Blocks are only held back while the `js` class on `<html>` is set (inline
+  script in `index.html`, which also removes it after 8 seconds as a safety
+  net), so the page can't get stuck invisible. `prefers-reduced-motion` turns
+  the animation off.
+
 ## Known gotchas (already debugged once — don't rediscover these)
 
 - **Finnhub free tier caps at 60 calls/min.** This site uses ~12 calls

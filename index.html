@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Alpha Intelligence — Valerio Marco Maugeri</title>
 <link rel="icon" id="favicon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+<script>
+// Marks JS as running, so the load-in can hold each block back until script.js reveals it.
+// If anything goes wrong, the page shows itself anyway after 8 seconds.
+document.documentElement.classList.add('js');
+setTimeout(function () { document.documentElement.classList.remove('js'); }, 8000);
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -13,37 +19,37 @@
 <body>
 
 <div class="page">
-  <a class="back" href="https://valerio-site.vercel.app/">&larr; Valerio Marco Maugeri</a>
+  <a class="back rise rise-now" href="https://valerio-site.vercel.app/">&larr; Valerio Marco Maugeri</a>
 
   <main>
-    <h1>Alpha Intelligence</h1>
-    <p class="subtitle">Live paper portfolio &middot; started 1 Aug 2026</p>
+    <h1 class="rise rise-now">Alpha Intelligence</h1>
+    <p class="subtitle rise rise-now">Live paper portfolio &middot; started 1 Aug 2026</p>
 
-    <div class="market-status">
+    <div class="market-status rise">
       <span class="status-dot" id="statusDot"></span>
       <span id="marketStatusText">Market &mdash;</span>
     </div>
 
-    <div class="stat-row">
+    <div class="stat-row rise">
       <div class="stat-value" id="currentValue">Loading&hellip;</div>
       <div class="stat-change" id="allTimeChange"></div>
     </div>
 
-    <div class="chart-range" id="chartRange">
+    <div class="chart-range rise" id="chartRange">
       <button class="range-btn" type="button" data-range="24H">24H</button>
       <button class="range-btn active" type="button" data-range="1W">1W</button>
       <button class="range-btn" type="button" data-range="1M">1M</button>
       <button class="range-btn" type="button" data-range="All">All</button>
     </div>
 
-    <div class="chart-wrap">
+    <div class="chart-wrap rise">
       <canvas id="chart"></canvas>
       <div class="chart-tooltip" id="chartTooltip"></div>
     </div>
 
-    <p class="chart-disclaimer">Chart shows data from Aug 12 onward &mdash; earlier tracking was affected by a logging issue. The portfolio&rsquo;s actual starting value was $100,000 on Aug 1.</p>
+    <p class="chart-disclaimer rise">Chart shows data from Aug 12 onward &mdash; earlier tracking was affected by a logging issue. The portfolio&rsquo;s actual starting value was $100,000 on Aug 1.</p>
 
-    <div class="positions-wrap">
+    <div class="positions-wrap rise">
       <div class="positions-header">
         <span></span>
         <span class="positions-header-right">
@@ -55,7 +61,7 @@
       <ul class="positions" id="positions"></ul>
     </div>
 
-    <div class="movers">
+    <div class="movers rise">
       <div class="mover">
         <span class="mover-label">Today&rsquo;s Gainer</span>
         <span class="mover-value" id="gainerValue">&mdash;</span>
@@ -66,12 +72,12 @@
       </div>
     </div>
 
-    <div class="closed-wrap">
+    <div class="closed-wrap rise">
       <div class="closed-header">Recently Closed</div>
       <ul class="closed-positions" id="closedPositions"></ul>
     </div>
 
-    <div class="allocation-wrap" id="allocation" hidden>
+    <div class="allocation-wrap rise" id="allocation" hidden>
       <div class="allocation-header">Allocation</div>
       <div class="pie-wrap">
         <canvas id="pie" role="img" aria-label="Pie chart of portfolio weights by position"></canvas>
@@ -79,7 +85,7 @@
       </div>
     </div>
 
-    <div class="bench-wrap" id="benchmarks" hidden>
+    <div class="bench-wrap rise" id="benchmarks" hidden>
       <div class="bench-header">
         <span>Benchmarks</span>
         <span class="bench-header-right">
@@ -91,7 +97,7 @@
       <p class="bench-note">Alpha is the portfolio&rsquo;s return minus the benchmark&rsquo;s, in percentage points. Benchmarks start from the Aug 3 open, where the portfolio&rsquo;s first orders filled.</p>
     </div>
 
-    <p class="updated" id="updated"></p>
+    <p class="updated rise" id="updated"></p>
   </main>
 </div>
 

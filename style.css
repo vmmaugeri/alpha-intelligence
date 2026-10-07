@@ -32,6 +32,22 @@ body {
   max-width: 480px;
 }
 
+/* Load-in: the same fade-up as the main site, top to bottom. Blocks are held back only while JS is
+   running (the "js" class set in index.html), and script.js adds .in to each one in turn. */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.js .rise {
+  opacity: 0;
+}
+
+.js .rise.in {
+  opacity: 1;
+  animation: fadeUp 0.7s ease var(--d, 0s) backwards;
+}
+
 .back {
   display: inline-block;
   font-size: 13px;
@@ -544,4 +560,6 @@ a.bench-label:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
   .status-dot.open { animation: none !important; }
+  .js .rise { opacity: 1; }
+  .js .rise.in { animation: none; }
 }
