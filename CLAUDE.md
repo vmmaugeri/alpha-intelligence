@@ -117,6 +117,9 @@ touching any of it:
   disappears by itself, so there is nothing to clean up. **Closed positions:**
   put a `note` on the entry in `CLOSED_POSITIONS`; it shows for as long as the
   entry is one of the 3 most recent.
+- **Pop-out:** after the page has loaded in, the bubbles pop out one at a time (`popNotes` in `script.js`),
+  each with its own delay and duration. Only the first batch animates: the 20 second refresh rebuilds the rows
+  and those bubbles just appear in place.
 - **Where a note shows:** on a wide screen (1100px and up) it comes out beside
   its row in the empty margin, alternating right, left, right down the page (the
   other side if the preferred one is blocked; `layoutSideNotes` in `script.js`); on anything narrower,
@@ -140,6 +143,9 @@ touching any of it:
   (`localStorage` key `ai-theme`, wrapped in try/catch) or else their system setting. The button in the top
   right switches and saves it. Until someone clicks it, the page follows the system setting live. Switching
   redraws the charts (`applyTheme`).
+- The control is an outlined pill switch (knob left = light, right = dark, `role="switch"`). Dark is the cream
+  turned down to a warm brown (`--paper #302C25`), deliberately not near-black. Switching eases colours over
+  ~0.35s via a temporary `.theme-fade` class, and the canvases fade out and back in around their redraw.
 - Keep dark mode monochrome like the light one: same outline style, no new accent colours.
 
 ## Win rate

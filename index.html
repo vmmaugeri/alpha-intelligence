@@ -32,9 +32,7 @@ setTimeout(function () { document.documentElement.classList.remove('js'); }, 800
 
 <div class="page">
   <a class="back rise rise-now" href="https://valerio-site.vercel.app/">&larr; Valerio Marco Maugeri</a>
-  <button class="theme-toggle rise rise-now" id="themeToggle" type="button" aria-label="Switch to dark mode" title="Light / dark">
-    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor"/></svg>
-  </button>
+  <button class="theme-toggle rise rise-now" id="themeToggle" type="button" role="switch" aria-checked="false" aria-label="Dark mode" title="Light / dark"><span class="theme-knob"></span></button>
 
   <main>
     <h1 class="rise rise-now">Alpha Intelligence</h1>

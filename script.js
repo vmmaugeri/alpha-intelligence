@@ -31,24 +31,47 @@ function savedTheme() {
   }
 }
 
+let themeFadeTimer = null;
+let themeRedrawTimer = null;
+
 function applyTheme(theme, save) {
-  document.documentElement.setAttribute('data-theme', theme);
+  const root = document.documentElement;
+  const animate = !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const canvases = [...document.querySelectorAll('canvas')];
+
+  // Ease the colours over for a moment. The canvases can't ease, so they fade out, get redrawn in the new
+  // colours, and fade back in.
+  if (animate) {
+    root.classList.add('theme-fade');
+    clearTimeout(themeFadeTimer);
+    themeFadeTimer = setTimeout(() => root.classList.remove('theme-fade'), 500);
+    canvases.forEach((c) => (c.style.opacity = '0'));
+  }
+
+  root.setAttribute('data-theme', theme);
   const button = document.getElementById('themeToggle');
-  if (button) button.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+  if (button) button.setAttribute('aria-checked', theme === 'dark' ? 'true' : 'false');
   if (save) {
     try {
       localStorage.setItem(THEME_KEY, theme);
     } catch (e) {}
   }
-  if (lastHistory.length > 0) renderChart();
-  if (pieState) drawPie(pieState.positions, pieHover);
+
+  const redraw = () => {
+    if (lastHistory.length > 0) renderChart();
+    if (pieState) drawPie(pieState.positions, pieHover);
+    canvases.forEach((c) => (c.style.opacity = ''));
+  };
+  clearTimeout(themeRedrawTimer);
+  if (animate) themeRedrawTimer = setTimeout(redraw, 170);
+  else redraw();
 }
 
 function attachThemeToggle() {
   const button = document.getElementById('themeToggle');
   const current = () => (document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
   if (button) {
-    button.setAttribute('aria-label', current() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+    button.setAttribute('aria-checked', current() === 'dark' ? 'true' : 'false');
     button.addEventListener('click', () => applyTheme(current() === 'dark' ? 'light' : 'dark', true));
   }
   // Until the visitor picks one, follow the system setting live.
@@ -557,7 +580,9 @@ function activeNote(ticker) {
 // date in the row, so its note doesn't need one.
 function buildNote(text, dateLabel) {
   const el = document.createElement('div');
-  el.className = 'note';
+  // Held back until popNotes() lets it out, unless the first pop-out has already happened (a refresh
+  // rebuilds the rows, and those bubbles should just be there).
+  el.className = notesPopped ? 'note' : 'note note-wait';
   if (dateLabel) {
     const date = document.createElement('span');
     date.className = 'note-date';
@@ -566,6 +591,23 @@ function buildNote(text, dateLabel) {
   }
   el.appendChild(document.createTextNode(text));
   return el;
+}
+
+// The bubbles pop out one by one after the page has loaded in, each on its own delay and speed so it never
+// looks like a block. Runs once for the notes waiting; later rebuilds skip it.
+let notesPopped = false;
+const POP_JITTER_MS = [0, 240, 90, 420, 150];
+const POP_DURATIONS_S = [0.7, 0.52, 0.85, 0.6];
+
+function popNotes(startMs) {
+  const waiting = [...document.querySelectorAll('.note.note-wait')];
+  waiting.forEach((el, i) => {
+    el.style.setProperty('--pop-delay', `${Math.round(startMs + i * 330 + POP_JITTER_MS[i % POP_JITTER_MS.length])}ms`);
+    el.style.setProperty('--pop-dur', `${POP_DURATIONS_S[i % POP_DURATIONS_S.length]}s`);
+    el.classList.remove('note-wait');
+    el.classList.add('note-pop');
+  });
+  if (waiting.length > 0) notesPopped = true;
 }
 
 // On a wide screen (1100px and up) a note comes out beside its row, in the empty margin, alternating
@@ -1241,6 +1283,7 @@ async function init() {
 
     document.getElementById('updated').textContent =
       'Updated ' + new Date(data.updatedAt).toLocaleString();
+    if (dataRevealed) popNotes(300); // bubbles that only turned up after the page was already revealed
   } catch (err) {
     valueEl.textContent = 'Unable to load prices';
     console.error(err);
@@ -1289,6 +1332,7 @@ function revealData() {
     el.classList.add('in');
     delay += REVEAL_STEP_MS;
   });
+  popNotes(delay + 450);
 }
 
 const fontsReady = Promise.race([

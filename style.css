@@ -7,20 +7,23 @@
   --hairline: #E6E1D4;
   --note-line: #cfcabc;
   --chart-origin: #C9C1AE;
+  --toggle-bg: #FCFAF4;
   color-scheme: light;
 }
 
-/* Dark theme: the same palette turned down. script.js sets data-theme (saved choice, else the system
-   setting), and the canvas charts read these variables too, so a colour only ever lives here. */
+/* Dark theme: the same cream turned down to a warm dark brown, not near-black. script.js sets data-theme
+   (saved choice, else the system setting), and the canvas charts read these variables too, so a colour
+   only ever lives here. */
 :root[data-theme="dark"] {
-  --paper: #1C1B18;
-  --ink: #E8E2D2;
-  --muted: #9A9487;
-  --accent: #90A976;
-  --negative: #D27B6E;
-  --hairline: #2F2D28;
-  --note-line: #4A473F;
-  --chart-origin: #5B574B;
+  --paper: #302C25;
+  --ink: #EEE7D6;
+  --muted: #A8A292;
+  --accent: #9DB483;
+  --negative: #DA8A7C;
+  --hairline: #433E34;
+  --note-line: #5C5648;
+  --chart-origin: #6F6959;
+  --toggle-bg: #3B362D;
   color-scheme: dark;
 }
 
@@ -50,36 +53,52 @@ body {
   max-width: 480px;
 }
 
+/* The light/dark switch: an outlined pill with a round knob that slides across. */
 .theme-toggle {
   position: absolute;
   top: -6px;
   right: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
+  width: 50px;
   height: 28px;
   padding: 0;
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid var(--hairline);
-  border-radius: 50%;
+  background: var(--toggle-bg);
+  border: 1.5px solid var(--ink);
+  border-radius: 14px;
   cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease;
 }
 
-.theme-toggle:hover,
+.theme-knob {
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  margin-top: -9px;
+  border-radius: 50%;
+  background: var(--ink);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+:root[data-theme="dark"] .theme-knob {
+  transform: translateX(23px);
+}
+
 .theme-toggle:focus-visible {
-  color: var(--ink);
-  border-color: var(--muted);
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
-.theme-toggle svg {
-  transition: transform 0.4s ease;
-}
+/* While the theme switches, colours ease over instead of snapping (script.js adds .theme-fade for a
+   moment). The canvases can't ease, so script.js fades them out and back in around the redraw. */
+@media (prefers-reduced-motion: no-preference) {
+  .theme-fade,
+  .theme-fade *:not(.theme-knob) {
+    transition: background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease !important;
+  }
 
-:root[data-theme="dark"] .theme-toggle svg {
-  transform: rotate(180deg);
+  .theme-fade canvas {
+    transition: opacity 0.17s ease !important;
+  }
 }
 
 /* Load-in: the same fade-up as the main site, top to bottom. Blocks are held back only while JS is
@@ -710,9 +729,35 @@ li.note-left > .note::before {
   border-left: 6px solid var(--note-line);
 }
 
+/* Bubbles pop out of their row one by one, each on its own delay and duration (script.js popNotes).
+   Only scale and opacity animate, so the side bubbles' own transform is left alone. */
+@keyframes notePop {
+  from { opacity: 0; scale: 0.88; }
+  to { opacity: 1; scale: 1; }
+}
+
+.js .note.note-wait {
+  opacity: 0;
+}
+
+.note.note-pop {
+  transform-origin: 16px 0;
+  animation: notePop var(--pop-dur, 0.6s) cubic-bezier(0.2, 0.9, 0.3, 1.15) var(--pop-delay, 0s) backwards;
+}
+
+li.note-right > .note.note-pop {
+  transform-origin: 0 50%;
+}
+
+li.note-left > .note.note-pop {
+  transform-origin: 100% 50%;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
   .status-dot.open { animation: none !important; }
   .js .rise { opacity: 1; }
   .js .rise.in { animation: none; }
+  .js .note.note-wait { opacity: 1; }
+  .note.note-pop { animation: none; }
 }
