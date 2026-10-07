@@ -41,6 +41,9 @@ buys, confirm gain% and $ figures. Valerio has been burned by silent
 arithmetic mistakes before and expects the numbers to actually be checked,
 not just look plausible.
 
+Each rebalance also gets short notes (the little bubbles) under the positions it
+touched. See "Notes" below.
+
 ## How to add a closed position correctly
 
 - **Weight is computed from ENTRY price × quantity, not current price.** This
@@ -102,6 +105,30 @@ touching any of it:
   backfill array, kept as a fallback for whatever the `v2` recovery doesn't
   cover — mostly superseded now, but still load-bearing for the earliest
   dates.
+
+## Notes (the little bubbles)
+
+- Each rebalance gets short notes, shown as small outlined bubbles under the
+  position: how much was added to or opened in it, or how much a close made,
+  plus a one-line reason when Valerio gives one. One or two sentences at most,
+  plain and non-promotional.
+- **Open positions:** add the note to `POSITION_NOTES` in `script.js` (keyed by
+  ticker, with a date). It shows for `NOTE_DAYS` (14) after that date and then
+  disappears by itself, so there is nothing to clean up. **Closed positions:**
+  put a `note` on the entry in `CLOSED_POSITIONS`; it shows for as long as the
+  entry is one of the 3 most recent.
+- **Where a note shows:** on a wide screen (1100px and up) it comes out beside
+  its row in the empty margin, alternating right, left, right down the page (the
+  other side if the preferred one is blocked; `layoutSideNotes` in `script.js`); on anything narrower,
+  or as a last resort when neither margin has room, it sits under its row.
+- **Dates:** a note on an open position leads with a small date line (the day
+  the change was made, e.g. "Oct 7"), so it is always clear when it happened. A
+  closed position's row already shows its own date, so its note has none.
+- **Verify every factual claim in a note before it goes in** (an earnings
+  beat, the date of another company's report, an analyst estimate), the same as
+  any other published text. Prefer a primary source (an SEC 8-K or a company
+  release) and compute the trade numbers from the fills. If a claim can't be
+  confirmed, leave it out and tell Valerio instead of publishing it.
 
 ## Benchmarks and alpha (SMH, QQQ)
 

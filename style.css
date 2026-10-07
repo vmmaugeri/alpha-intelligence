@@ -557,6 +557,88 @@ a.bench-label:focus-visible {
   }
 }
 
+/* The little bubbles: a short note about a position's latest move. They sit under the row (the tail points
+   up at it) and, on a wide screen, come out beside the row instead (the tail points left). */
+.positions li.has-note,
+.closed-positions li.has-note {
+  flex-wrap: wrap;
+}
+
+.note {
+  position: relative;
+  flex: 0 0 100%;
+  margin: 10px 0 2px;
+  padding: 6px 11px;
+  border: 1px solid #cfcabc;
+  border-radius: 11px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.note::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 16px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 6px solid #cfcabc;
+}
+
+.note-date {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+/* Beside the row on a wide screen: script.js marks the row .note-side plus .note-right or .note-left
+   (see layoutSideNotes). The tail points back at the row. */
+.positions li.has-note.note-side,
+.closed-positions li.has-note.note-side {
+  position: relative;
+  flex-wrap: nowrap;
+}
+
+li.note-side > .note {
+  position: absolute;
+  top: 50%;
+  width: 240px;
+  margin: 0;
+  transform: translateY(calc(-50% + var(--note-shift, 0px)));
+}
+
+li.note-right > .note {
+  left: calc(100% + 22px);
+}
+
+li.note-left > .note {
+  right: calc(100% + 22px);
+}
+
+li.note-side > .note::before {
+  top: calc(50% - var(--note-shift, 0px) - 5px);
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+}
+
+li.note-right > .note::before {
+  left: -6px;
+  border-left: 0;
+  border-right: 6px solid #cfcabc;
+}
+
+li.note-left > .note::before {
+  left: auto;
+  right: -6px;
+  border-right: 0;
+  border-left: 6px solid #cfcabc;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
   .status-dot.open { animation: none !important; }

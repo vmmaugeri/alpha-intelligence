@@ -307,6 +307,14 @@ function attachChartInteractivity() {
 // Static historical record (no live prices needed — these are settled).
 const CLOSED_POSITIONS = [
   {
+    ticker: 'PENG',
+    status: 'Closed',
+    date: '2026-10-07',
+    buys: [{ qty: 88.03, price: 60.50 }],
+    sells: [{ qty: 88.03, price: 72.97 }],
+    note: 'A successful 1-day swing trade: the position rose 20.6% for a $1,098 gain after Q4 earnings came in well above the company’s outlook.',
+  },
+  {
     ticker: 'BRUN',
     status: 'Closed',
     date: '2026-10-06',
@@ -456,6 +464,83 @@ function formatClosedDate(dateStr) {
   });
 }
 
+// --- Notes: the little bubbles under a position ---
+// One or two short sentences about the latest move in a position: what was added or opened, what a close
+// made, and why. Open positions are keyed by ticker and show for NOTE_DAYS after their date, then
+// disappear by themselves. A closed position keeps its note on its CLOSED_POSITIONS entry, so it shows
+// for as long as that entry is one of the most recent.
+const NOTE_DAYS = 14;
+const POSITION_NOTES = {
+  MU: {
+    date: '2026-10-07',
+    text: 'Added 2.15 shares ($2,337) ahead of Samsung’s early Q3 figures on Thu 8 Oct, where the tone on memory prices and margins matters most for MU.',
+  },
+  SNDK: {
+    date: '2026-10-07',
+    text: 'Added 2.37 shares ($4,086) for the same Samsung read on Thu 8 Oct, as memory pricing and margins drive SanDisk too.',
+  },
+};
+
+function activeNote(ticker) {
+  const note = POSITION_NOTES[ticker];
+  if (!note) return null;
+  const ageDays = (Date.now() - new Date(`${note.date}T12:00:00Z`).getTime()) / 86400000;
+  if (ageDays > NOTE_DAYS) return null;
+  return { text: note.text, dateLabel: formatClosedDate(note.date) };
+}
+
+// A note on an open position leads with the date the change was made. A closed position already shows its
+// date in the row, so its note doesn't need one.
+function buildNote(text, dateLabel) {
+  const el = document.createElement('div');
+  el.className = 'note';
+  if (dateLabel) {
+    const date = document.createElement('span');
+    date.className = 'note-date';
+    date.textContent = dateLabel;
+    el.appendChild(date);
+  }
+  el.appendChild(document.createTextNode(text));
+  return el;
+}
+
+// On a wide screen (1100px and up) a note comes out beside its row, in the empty margin, alternating
+// right, left, right... down the page so it feels even. On anything narrower it stays under the row.
+// Notes for neighbouring positions could overlap, so each one is nudged down just enough to clear the one
+// above it on its side, with its tail still pointing at its row. If neither margin has room, that note
+// simply goes under its row instead.
+function layoutSideNotes() {
+  const wide = window.matchMedia('(min-width: 1100px)').matches;
+  let turn = 0;
+  ['positions', 'closedPositions'].forEach((id) => {
+    const list = document.getElementById(id);
+    if (!list) return;
+    const rows = [...list.querySelectorAll('li.has-note')];
+    rows.forEach((li) => {
+      li.classList.remove('note-side', 'note-right', 'note-left');
+      li.querySelector('.note').style.removeProperty('--note-shift');
+    });
+    if (!wide) return;
+
+    const prevBottom = { right: -Infinity, left: -Infinity };
+    rows.forEach((li) => {
+      const note = li.querySelector('.note');
+      const order = turn++ % 2 === 0 ? ['right', 'left'] : ['left', 'right'];
+      for (const side of order) {
+        li.classList.add('note-side', `note-${side}`);
+        const r = note.getBoundingClientRect();
+        const need = Math.max(0, prevBottom[side] + 8 - r.top);
+        if (need <= Math.max(0, r.height / 2 - 16)) {
+          if (need > 0) note.style.setProperty('--note-shift', `${need}px`);
+          prevBottom[side] = r.top + need + r.height;
+          return;
+        }
+        li.classList.remove('note-side', `note-${side}`);
+      }
+    });
+  });
+}
+
 function renderClosedPositions() {
   const list = document.getElementById('closedPositions');
   if (!list) return;
@@ -497,6 +582,10 @@ function renderClosedPositions() {
 
     li.appendChild(name);
     li.appendChild(change);
+    if (pos.note) {
+      li.classList.add('has-note');
+      li.appendChild(buildNote(pos.note));
+    }
     list.appendChild(li);
   });
 }
@@ -1038,10 +1127,21 @@ async function init() {
       right.appendChild(weight);
       li.appendChild(name);
       li.appendChild(right);
+      const note = activeNote(p.ticker);
+      if (note) {
+        li.classList.add('has-note');
+        li.appendChild(buildNote(note.text, note.dateLabel));
+      }
       list.appendChild(li);
     });
 
     renderMovers(data.positions);
+
+    try {
+      layoutSideNotes();
+    } catch (noteErr) {
+      console.error(noteErr);
+    }
 
     try {
       renderPie(data.positions);
@@ -1121,8 +1221,11 @@ attachChartInteractivity();
 attachPieInteractivity();
 attachRangeButtons();
 renderClosedPositions();
+layoutSideNotes();
+window.addEventListener('resize', layoutSideNotes);
 
 fontsReady.then(revealHeader);
+fontsReady.then(layoutSideNotes);
 Promise.allSettled([firstTick, fontsReady]).then(revealData);
 setTimeout(revealData, 3000);
 

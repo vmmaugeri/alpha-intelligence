@@ -6,13 +6,12 @@ const POSITIONS = [
   { ticker: 'INTC', name: 'Intel Corporation',      quantity: 186.28, entryPrice: 101.59 },
   { ticker: 'NBIS', name: 'Nebius Group',           quantity: 82.44,  entryPrice: 208.63 },
   { ticker: 'AAOI', name: 'Applied Optoelectronics', quantity: 136.64, entryPrice: 111.21 },
-  { ticker: 'MU',   name: 'Micron Technology',      quantity: 21.48,  entryPrice: 1011.60 },
+  { ticker: 'MU',   name: 'Micron Technology',      quantity: 23.63,  entryPrice: 1018.46 },
   { ticker: 'CIEN', name: 'Ciena Corporation',      quantity: 24.42,  entryPrice: 429.61 },
-  { ticker: 'SNDK', name: 'SanDisk Corporation',    quantity: 6.36,   entryPrice: 1771.30 },
+  { ticker: 'SNDK', name: 'SanDisk Corporation',    quantity: 8.73,   entryPrice: 1758.48 },
   { ticker: 'META', name: 'Meta Platforms',         quantity: 12.06,  entryPrice: 708.13 },
   { ticker: 'MRVL', name: 'Marvell Technology',     quantity: 27.34,  entryPrice: 272.42 },
   { ticker: 'LITE', name: 'Lumentum Holdings',      quantity: 7.16,   entryPrice: 1117.08 },
-  { ticker: 'PENG', name: 'Penguin Solutions',      quantity: 88.03,  entryPrice: 60.50  },
 ];
 
 const ENTRY_VALUE = POSITIONS.reduce((sum, p) => sum + p.quantity * p.entryPrice, 0);
