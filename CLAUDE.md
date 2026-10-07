@@ -130,6 +130,26 @@ touching any of it:
   release) and compute the trade numbers from the fills. If a claim can't be
   confirmed, leave it out and tell Valerio instead of publishing it.
 
+## Light / dark theme
+
+- Every colour lives as a CSS variable in `style.css`: the light set on `:root`, the dark set on
+  `:root[data-theme="dark"]`. **Never hard-code a colour** in CSS or in the canvas code. The line chart and the
+  pie read the variables at draw time (`themeColors()` in `script.js`), so a new colour goes in the variable
+  sets, as a 6-digit hex (`withAlpha` parses it).
+- The theme is chosen before first paint by an inline script in `index.html`: the visitor's saved choice
+  (`localStorage` key `ai-theme`, wrapped in try/catch) or else their system setting. The button in the top
+  right switches and saves it. Until someone clicks it, the page follows the system setting live. Switching
+  redraws the charts (`applyTheme`).
+- Keep dark mode monochrome like the light one: same outline style, no new accent colours.
+
+## Win rate
+
+- The "Win rate" line under Recently Closed counts **every** entry in `CLOSED_POSITIONS` (closes and trims
+  alike, each one a realized trade), not just the 3 shown. A win is a sale above the entry price. Nothing to
+  maintain: a new closed or trimmed entry is counted automatically, so keep adding trims as their own entries.
+  Because the older bundled entries (MU, AXTI, LITE, the Aug 25 MRVL) each count once, it is a rate over
+  recorded entries, not over individual fills.
+
 ## Benchmarks and alpha (SMH, QQQ)
 
 - `BENCHMARKS` in `api/quotes.js` holds one fixed baseline price per ETF: the

@@ -6,6 +6,18 @@
 <title>Alpha Intelligence — Valerio Marco Maugeri</title>
 <link rel="icon" id="favicon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
 <script>
+// Picks the colour theme before the page paints, so there is no flash: the saved choice if there is one,
+// otherwise the visitor's system setting.
+(function () {
+  var theme = null;
+  try { theme = localStorage.getItem('ai-theme'); } catch (e) {}
+  if (theme !== 'light' && theme !== 'dark') {
+    theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  document.documentElement.setAttribute('data-theme', theme);
+})();
+</script>
+<script>
 // Marks JS as running, so the load-in can hold each block back until script.js reveals it.
 // If anything goes wrong, the page shows itself anyway after 8 seconds.
 document.documentElement.classList.add('js');
@@ -20,6 +32,9 @@ setTimeout(function () { document.documentElement.classList.remove('js'); }, 800
 
 <div class="page">
   <a class="back rise rise-now" href="https://valerio-site.vercel.app/">&larr; Valerio Marco Maugeri</a>
+  <button class="theme-toggle rise rise-now" id="themeToggle" type="button" aria-label="Switch to dark mode" title="Light / dark">
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor"/></svg>
+  </button>
 
   <main>
     <h1 class="rise rise-now">Alpha Intelligence</h1>
@@ -75,6 +90,7 @@ setTimeout(function () { document.documentElement.classList.remove('js'); }, 800
     <div class="closed-wrap rise">
       <div class="closed-header">Recently Closed</div>
       <ul class="closed-positions" id="closedPositions"></ul>
+      <div class="closed-stats" id="closedStats"></div>
     </div>
 
     <div class="allocation-wrap rise" id="allocation" hidden>

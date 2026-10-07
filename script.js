@@ -1,3 +1,66 @@
+// --- Theme ---
+// The colours live in style.css as variables. The canvas charts read them from there at draw time, so
+// light and dark stay in one place.
+const THEME_KEY = 'ai-theme';
+
+function themeColors() {
+  const style = getComputedStyle(document.documentElement);
+  const get = (name) => style.getPropertyValue(name).trim();
+  return {
+    ink: get('--ink'),
+    muted: get('--muted'),
+    accent: get('--accent'),
+    negative: get('--negative'),
+    hairline: get('--hairline'),
+    origin: get('--chart-origin'),
+  };
+}
+
+// '#RRGGBB' plus an opacity, as an rgba() string for the chart's fills.
+function withAlpha(hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+function savedTheme() {
+  try {
+    const t = localStorage.getItem(THEME_KEY);
+    return t === 'light' || t === 'dark' ? t : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function applyTheme(theme, save) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const button = document.getElementById('themeToggle');
+  if (button) button.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+  if (save) {
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch (e) {}
+  }
+  if (lastHistory.length > 0) renderChart();
+  if (pieState) drawPie(pieState.positions, pieHover);
+}
+
+function attachThemeToggle() {
+  const button = document.getElementById('themeToggle');
+  const current = () => (document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
+  if (button) {
+    button.setAttribute('aria-label', current() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+    button.addEventListener('click', () => applyTheme(current() === 'dark' ? 'light' : 'dark', true));
+  }
+  // Until the visitor picks one, follow the system setting live.
+  if (window.matchMedia) {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = (e) => {
+      if (!savedTheme()) applyTheme(e.matches ? 'dark' : 'light', false);
+    };
+    if (media.addEventListener) media.addEventListener('change', onChange);
+  }
+}
+
 function formatCurrency(n) {
   return n.toLocaleString('en-US', {
     style: 'currency',
@@ -167,9 +230,10 @@ function drawChart(history, entryValue, hoverIndex) {
   const dataMax = Math.max(...values);
 
   const rangeIsPositive = history[history.length - 1].value >= history[0].value;
-  const lineColor = rangeIsPositive ? '#6E8259' : '#A14A3F';
-  const fillColorTop = rangeIsPositive ? 'rgba(110, 130, 89, 0.22)' : 'rgba(161, 74, 63, 0.18)';
-  const fillColorBottom = rangeIsPositive ? 'rgba(110, 130, 89, 0)' : 'rgba(161, 74, 63, 0)';
+  const colors = themeColors();
+  const lineColor = rangeIsPositive ? colors.accent : colors.negative;
+  const fillColorTop = withAlpha(lineColor, rangeIsPositive ? 0.22 : 0.18);
+  const fillColorBottom = withAlpha(lineColor, 0);
 
   const rawMin = dataMin;
   const rawMax = dataMax;
@@ -191,19 +255,19 @@ function drawChart(history, entryValue, hoverIndex) {
   ctx.textAlign = 'right';
   ticks.forEach((v) => {
     const y = yFor(v);
-    ctx.strokeStyle = '#E6E1D4';
+    ctx.strokeStyle = colors.hairline;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(padLeft, y);
     ctx.lineTo(width - padRight, y);
     ctx.stroke();
-    ctx.fillStyle = '#8F8A7C';
+    ctx.fillStyle = colors.muted;
     ctx.fillText(formatCompact(v), padLeft - 8, y);
   });
 
   if (entryValue != null && showOriginLine) {
     const by = yFor(entryValue);
-    ctx.strokeStyle = '#C9C1AE';
+    ctx.strokeStyle = colors.origin;
     ctx.lineWidth = 1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath();
@@ -240,7 +304,7 @@ function drawChart(history, entryValue, hoverIndex) {
 
   if (hoverIndex != null && points[hoverIndex]) {
     const [hx] = points[hoverIndex];
-    ctx.strokeStyle = 'rgba(51, 50, 46, 0.22)';
+    ctx.strokeStyle = withAlpha(colors.ink, 0.22);
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(hx, padTop);
@@ -258,7 +322,7 @@ function drawChart(history, entryValue, hoverIndex) {
     ctx.fill();
   });
 
-  ctx.fillStyle = '#8F8A7C';
+  ctx.fillStyle = colors.muted;
   ctx.font = '10px Raleway, sans-serif';
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
@@ -588,6 +652,27 @@ function renderClosedPositions() {
     }
     list.appendChild(li);
   });
+
+  renderWinRate();
+}
+
+// Win rate over every entry in CLOSED_POSITIONS (closes and trims alike, each one a realized trade), not
+// just the 3 shown. A win is a sale above the entry price.
+function renderWinRate() {
+  const el = document.getElementById('closedStats');
+  if (!el || CLOSED_POSITIONS.length === 0) return;
+  const total = CLOSED_POSITIONS.length;
+  const wins = CLOSED_POSITIONS.filter((pos) => computeClosedSummary(pos).gainPct > 0).length;
+
+  el.innerHTML = '';
+  const label = document.createElement('span');
+  label.className = 'closed-stats-label';
+  label.textContent = 'Win rate';
+  const value = document.createElement('span');
+  value.className = 'closed-stats-value';
+  value.innerHTML = `${Math.round((wins / total) * 100)}% <span class="closed-usd">(${wins} of ${total} trades)</span>`;
+  el.appendChild(label);
+  el.appendChild(value);
 }
 
 // --- Allocation pie chart ---
@@ -596,8 +681,6 @@ function renderClosedPositions() {
 // leader line points from the slice to the ticker outside the pie.
 const PIE_TILT = 0.7; // vertical squash of the circle (smaller = more tilted)
 const PIE_DEPTH = 12; // thickness of the pie's edge in px
-const PIE_INK = '#33322E';
-const PIE_MUTED = '#8F8A7C';
 
 let pieState = null;
 let pieHover = null;
@@ -754,10 +837,11 @@ function drawPie(positions, hoverIndex) {
   const rimX = (a) => cx + Math.cos(a) * R;
   const rimY = (a) => cy + Math.sin(a) * R * k;
   const dimmed = hoverIndex != null && slices[hoverIndex] != null;
+  const { ink, muted } = themeColors();
 
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.strokeStyle = PIE_INK;
+  ctx.strokeStyle = ink;
   ctx.lineWidth = 1;
   ctx.globalAlpha = dimmed ? 0.45 : 1;
 
@@ -804,19 +888,19 @@ function drawPie(positions, hoverIndex) {
   labels.forEach((l, i) => {
     ctx.globalAlpha = dimmed && i !== hoverIndex ? 0.45 : 1;
     if (!l.inside) {
-      ctx.strokeStyle = PIE_MUTED;
+      ctx.strokeStyle = muted;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(l.ax, l.ay);
       ctx.lineTo(l.ex, l.ey);
       if (l.hx != null) ctx.lineTo(l.hx, l.ey);
       ctx.stroke();
-      ctx.fillStyle = PIE_INK;
+      ctx.fillStyle = ink;
       ctx.beginPath();
       ctx.arc(l.ax, l.ay, 1.8, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.fillStyle = PIE_INK;
+    ctx.fillStyle = ink;
     ctx.textAlign = l.align;
     ctx.fillText(positions[i].ticker, l.tx, l.ty + textH / 2);
   });
@@ -1217,6 +1301,7 @@ const fontsReady = Promise.race([
 ]);
 
 const firstTick = tick();
+attachThemeToggle();
 attachChartInteractivity();
 attachPieInteractivity();
 attachRangeButtons();
