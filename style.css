@@ -7,7 +7,6 @@
   --hairline: #E6E1D4;
   --note-line: #cfcabc;
   --chart-origin: #C9C1AE;
-  --toggle-bg: #FCFAF4;
   color-scheme: light;
 }
 
@@ -23,7 +22,6 @@
   --hairline: #433E34;
   --note-line: #5C5648;
   --chart-origin: #6F6959;
-  --toggle-bg: #3B362D;
   color-scheme: dark;
 }
 
@@ -61,7 +59,7 @@ body {
   width: 50px;
   height: 28px;
   padding: 0;
-  background: var(--toggle-bg);
+  background: transparent;
   border: 1.5px solid var(--ink);
   border-radius: 14px;
   cursor: pointer;
