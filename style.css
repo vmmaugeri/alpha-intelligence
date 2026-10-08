@@ -40,6 +40,7 @@ html {
 }
 
 body {
+  position: relative;
   background-color: var(--paper);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-repeat: repeat;
@@ -54,8 +55,20 @@ body {
 
 .page {
   position: relative;
+  z-index: 1;
   width: 100%;
   max-width: 480px;
+}
+
+/* Easter egg: stars across the top of the page in dark mode while the market is closed (script.js). */
+#stars {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  width: 100%;
+  height: 440px;
+  pointer-events: none;
 }
 
 /* The light/dark switch: an outlined pill with a round knob that slides across. */
@@ -496,25 +509,43 @@ a.closed-ticker:focus-visible {
   color: var(--negative);
 }
 
-.closed-stats {
+/* Track record: five quiet figures in one evenly spaced row under Recently Closed (wraps only on very narrow screens). */
+.track-row {
   display: flex;
-  align-items: baseline;
+  flex-wrap: wrap;
   justify-content: space-between;
-  padding: 10px 2px 0;
+  gap: 12px 10px;
+  padding: 14px 2px 0;
 }
 
-.closed-stats-label {
-  font-size: 10px;
+.track-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.track-label {
+  font-size: 9px;
   font-weight: 500;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
-.closed-stats-value {
-  font-size: 11.5px;
+.track-value {
+  font-size: 13px;
   font-weight: 500;
   color: var(--ink);
+}
+
+.track-value.pos {
+  color: var(--accent);
+}
+
+.track-value.neg {
+  color: var(--negative);
 }
 
 .pie-wrap {
@@ -587,6 +618,18 @@ a.history-ticker:focus-visible {
 
 .history-name {
   font-size: 11px;
+  color: var(--muted);
+}
+
+.history-head-right {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.history-weight {
+  font-size: 16px;
+  font-weight: 500;
   color: var(--muted);
 }
 

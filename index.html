@@ -29,6 +29,7 @@ setTimeout(function () { document.documentElement.classList.remove('js'); }, 800
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<canvas id="stars" aria-hidden="true"></canvas>
 
 <div class="page">
   <a class="back rise rise-now" href="https://valerio-site.vercel.app/">&larr; Valerio Marco Maugeri</a>
@@ -88,7 +89,7 @@ setTimeout(function () { document.documentElement.classList.remove('js'); }, 800
     <div class="closed-wrap rise">
       <div class="closed-header">Recently Closed</div>
       <ul class="closed-positions" id="closedPositions"></ul>
-      <div class="closed-stats" id="closedStats"></div>
+      <div class="track-row" id="trackRow"></div>
     </div>
 
     <div class="allocation-wrap rise" id="allocation" hidden>

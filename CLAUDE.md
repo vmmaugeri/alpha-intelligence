@@ -55,9 +55,10 @@ touched. See "Notes" below.
   date, its `buys` is just the shares that entry sold (at the position's
   entry price), and its `sells` is that one fill. See the `VIAV` entries
   (Aug 28 trim, Oct 2 close) and the `BE` entries (Sept 9 trim, Sept 21
-  close). Older entries (`MU`, `AXTI`, `LITE`, and the Aug 25 `MRVL`) were
-  recorded before this rule and still bundle their trims with the final
-  sale — leave them as they are unless asked.
+  close). **Sells on the same day are one entry; sells on different days are separate entries** (so AXTI's
+  two Aug 14 sells are one `Trimmed` entry, and its Aug 17 sale is its own `Closed` entry). The four old
+  bundled entries (`MU`, `AXTI`, `LITE`, the Aug 25 `MRVL`) were split this way on 2026-10-08, from the
+  TradingView export.
 - **The repo does not store trim sale prices** (positions only keep size and
   entry price). Before adding a closed entry, check the git history of that
   ticker's `POSITIONS` line in `api/quotes.js` for size drops with an
@@ -140,9 +141,13 @@ touching any of it:
   live figures (Realized, Open, Net P&L). Nothing extra to maintain: it reads the same two arrays as the rest
   of the page. **So every rebalance should log each buy in `TRADE_LOG`**, with its date and fill price.
 - `TRADE_LOG` holds every buy for the open tickers, including the buys behind trades since closed, so a
-  sale never appears without its purchase. Rows up to 2026-09-09 were rebuilt from the repo's git history
-  (date = the day the position was updated here, Opened price = entry price, Added price = back-solved from
-  the blended entry) rather than typed from order screenshots, so correct them from TradingView if one is off.
+  sale never appears without its purchase. Its dates and prices are the **exact fills from the TradingView paper
+  trading export of 2026-10-08** (68 filled orders, Aug 3 to Oct 7), cross-checked in both directions: every
+  `TRADE_LOG` row exists in the export and every export buy for an open ticker is in the log, and every sale in
+  `CLOSED_POSITIONS` matches an export fill. Two trades in that export are **deliberately not on the site**,
+  CBOE:RAM and OMXSTO:SIVE (bought Aug 14, sold Aug 17): Valerio's portfolio tracker does not cover them, so
+  they were never shown. Do not add them back. A private copy of that export is kept in Claude's memory folder
+  (`tradingview-orders-2026-10-08.csv`), not in this repo, because the repo is publicly served.
   **Check after any edit:** replaying a ticker's `TRADE_LOG` buys and its `CLOSED_POSITIONS` sells in date order
   must end at that ticker's current size and entry price in `POSITIONS`, and no sale may come before the first
   buy. If a trim's sale price is ever missing, leave it out of the log and ask for the fill from TradingView
@@ -152,6 +157,17 @@ touching any of it:
 - The open position's share count isn't in the API response, so the panel backs it out of the weight
   (`openPosition`). Open P&L is on the current blended entry price, Realized is the sum of that ticker's
   `CLOSED_POSITIONS` entries.
+
+## Stars (easter egg)
+
+- In **dark mode while the market is closed**, a faint field of stars sits across the top of the page
+  (`#stars`, a 440px-tall canvas behind the content; code is the "Stars" block at the top of `script.js`).
+  They are thickest at the left and right edges and thin toward the middle where the title and chart are, and
+  they twinkle very gently. When the market opens (checked on the 20 second refresh, with the same
+  `isMarketOpen()` as the status text, so no holiday calendar) they drift up and fade one by one over ~3s.
+  Switching to light mode fades them quickly, and `prefers-reduced-motion` shows them still.
+- The sky is the same every time (fixed seed) and only the star colour comes from the theme (`--ink`). Keep it
+  faint: it is meant to be found, not noticed.
 
 ## Light / dark theme
 
@@ -168,13 +184,19 @@ touching any of it:
   ~0.35s via a temporary `.theme-fade` class, and the canvases fade out and back in around their redraw.
 - Keep dark mode monochrome like the light one: same outline style, no new accent colours.
 
-## Win rate
+## Track record (the five figures under Recently Closed)
 
-- The "Win rate" line under Recently Closed counts **every** entry in `CLOSED_POSITIONS` (closes and trims
-  alike, each one a realized trade), not just the 3 shown. A win is a sale above the entry price. Nothing to
-  maintain: a new closed or trimmed entry is counted automatically, so keep adding trims as their own entries.
-  Because the older bundled entries (MU, AXTI, LITE, the Aug 25 MRVL) each count once, it is a rate over
-  recorded entries, not over individual fills.
+- One quiet row: Win rate, Profit factor, Avg win, Avg loss, Avg hold. All come from **every** entry in
+  `CLOSED_POSITIONS` (closes and trims alike, each one a realized trade), not just the 3 shown, and open
+  positions are in none of them. Nothing to maintain except the data: a new closed or trimmed entry is counted
+  automatically.
+- Win rate: a win is a sale above the entry price. Profit factor: total $ won on winning entries divided by
+  total $ lost on losing ones. Avg win / Avg loss: the plain mean of those entries' % returns.
+- **Every `CLOSED_POSITIONS` entry needs an `opened` date** (the day the shares it sold were first bought, first
+  in first out) for Avg hold, taken from the TradingView order history.
+- Max drawdown was tried and dropped (Valerio's call), as was a separate "Track record" section.
+- The figures are centered under their labels, and Avg hold reads "21 days". The `opened` dates are exact
+  (first buy of the shares sold, first in first out) from the TradingView export of 2026-10-08.
 
 ## Benchmarks and alpha (SMH, QQQ)
 

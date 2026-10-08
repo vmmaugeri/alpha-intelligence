@@ -1,3 +1,129 @@
+// --- Stars (easter egg) ---
+// In dark mode while the market is closed, a faint field of stars across the top of the page: thickest at the
+// left and right edges, thinning out toward the middle where the title and chart are, twinkling very gently.
+// When the market opens they drift up and fade away one by one. Switching to light mode fades them quickly.
+const STAR_HEIGHT = 440;
+let stars = [];
+let starsWidth = 0;
+let starsState = 'off'; // 'off' | 'in' | 'on' | 'out'
+let starsStart = 0;
+let starsFast = false;
+let starsInk = '#EEE7D6';
+let starsFrame = null;
+let starsLast = 0;
+
+function seededRandom(seed) {
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// The same sky every time (fixed seed), laid out for the current width.
+function buildStars(width) {
+  const rand = seededRandom(20261008);
+  const count = Math.round(Math.min(240, Math.max(60, width / 5)));
+  const list = [];
+  for (let tries = 0; list.length < count && tries < count * 60; tries++) {
+    const x = rand();
+    const edge = Math.abs(x * 2 - 1); // 0 in the middle, 1 at either edge
+    if (rand() > 0.06 + 0.94 * Math.pow(edge, 1.7)) continue;
+    list.push({
+      x: x * width,
+      y: Math.pow(rand(), 1.5) * STAR_HEIGHT,
+      r: 0.5 + rand() * 0.9,
+      a: 0.2 + rand() * 0.4,
+      phase: rand() * 6.28,
+      speed: 0.4 + rand() * 0.9,
+      inDelay: rand() * 1400,
+      outDelay: rand() * 1500,
+      rise: 25 + rand() * 60,
+    });
+  }
+  return list;
+}
+
+function drawStars(now) {
+  const canvas = document.getElementById('stars');
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+  }
+  if (width !== starsWidth) {
+    starsWidth = width;
+    stars = buildStars(width);
+  }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const t = now - starsStart;
+  const clamp = (v) => Math.max(0, Math.min(1, v));
+  const outLength = starsFast || reduce ? 350 : 1700;
+  let finished = true;
+
+  ctx.fillStyle = starsInk;
+  stars.forEach((s) => {
+    let k = 1;
+    let dy = 0;
+    if (starsState === 'in') {
+      k = reduce ? 1 : clamp((t - s.inDelay) / 1200);
+      if (k < 1) finished = false;
+    } else if (starsState === 'out') {
+      const p = clamp((t - (starsFast || reduce ? 0 : s.outDelay)) / outLength);
+      k = 1 - p;
+      dy = reduce ? 0 : -s.rise * (1 - Math.pow(1 - p, 2));
+      if (p < 1) finished = false;
+    }
+    if (k <= 0) return;
+    const twinkle = reduce ? 1 : 0.8 + 0.2 * Math.sin((now / 1000) * s.speed * 2 + s.phase);
+    ctx.globalAlpha = s.a * twinkle * k * (1 - 0.85 * (s.y / STAR_HEIGHT));
+    ctx.beginPath();
+    ctx.arc(s.x, s.y + dy, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+
+  if (starsState === 'in' && finished) starsState = 'on';
+  if (starsState === 'out' && finished) {
+    starsState = 'off';
+    ctx.clearRect(0, 0, width, height);
+  }
+}
+
+function starsLoop(now) {
+  starsFrame = null;
+  if (starsState === 'off') return;
+  if (now - starsLast >= 33) {
+    starsLast = now;
+    drawStars(now);
+  }
+  if (starsState !== 'off') starsFrame = requestAnimationFrame(starsLoop);
+}
+
+function setStars(state, fast) {
+  starsState = state;
+  starsFast = !!fast;
+  starsStart = performance.now();
+  starsInk = themeColors().ink;
+  if (starsFrame === null) starsFrame = requestAnimationFrame(starsLoop);
+}
+
+// Called on every refresh, and when the theme changes.
+function updateStars(fast) {
+  if (!document.getElementById('stars')) return;
+  const want = document.documentElement.getAttribute('data-theme') === 'dark' && !isMarketOpen();
+  if (want && (starsState === 'off' || starsState === 'out')) setStars('in');
+  else if (!want && (starsState === 'on' || starsState === 'in')) setStars('out', fast);
+}
+
 // --- Theme ---
 // The colours live in style.css as variables. The canvas charts read them from there at draw time, so
 // light and dark stay in one place.
@@ -65,6 +191,7 @@ function applyTheme(theme, save) {
   clearTimeout(themeRedrawTimer);
   if (animate) themeRedrawTimer = setTimeout(redraw, 170);
   else redraw();
+  updateStars(true);
 }
 
 function attachThemeToggle() {
@@ -397,6 +524,7 @@ const CLOSED_POSITIONS = [
     ticker: 'PENG',
     status: 'Closed',
     date: '2026-10-07',
+    opened: '2026-10-06',
     buys: [{ qty: 88.03, price: 60.50 }],
     sells: [{ qty: 88.03, price: 72.97 }],
     note: 'A successful 1-day swing trade: the position rose 20.6% for a $1,098 gain after Q4 earnings came in well above the company’s outlook.',
@@ -405,6 +533,7 @@ const CLOSED_POSITIONS = [
     ticker: 'BRUN',
     status: 'Closed',
     date: '2026-10-06',
+    opened: '2026-08-03',
     buys: [{ qty: 923.49, price: 19.88 }],
     sells: [{ qty: 923.49, price: 15.50 }],
   },
@@ -412,6 +541,7 @@ const CLOSED_POSITIONS = [
     ticker: 'VIAV',
     status: 'Closed',
     date: '2026-10-02',
+    opened: '2026-08-14',
     buys: [{ qty: 157.6, price: 43.02 }],
     sells: [{ qty: 157.6, price: 47.21 }],
   },
@@ -419,6 +549,7 @@ const CLOSED_POSITIONS = [
     ticker: 'BE',
     status: 'Closed',
     date: '2026-09-21',
+    opened: '2026-08-25',
     buys: [{ qty: 47.23, price: 213.90 }],
     sells: [{ qty: 47.23, price: 275.79 }],
   },
@@ -426,6 +557,7 @@ const CLOSED_POSITIONS = [
     ticker: 'SILC',
     status: 'Closed',
     date: '2026-09-21',
+    opened: '2026-08-17',
     buys: [{ qty: 130.64, price: 49.81 }],
     sells: [{ qty: 130.64, price: 48.29 }],
   },
@@ -433,6 +565,7 @@ const CLOSED_POSITIONS = [
     ticker: 'MRVL',
     status: 'Closed',
     date: '2026-09-09',
+    opened: '2026-08-28',
     buys: [{ qty: 70, price: 222.50 }],
     sells: [{ qty: 70, price: 232.46 }],
   },
@@ -440,6 +573,7 @@ const CLOSED_POSITIONS = [
     ticker: 'BE',
     status: 'Trimmed',
     date: '2026-09-09',
+    opened: '2026-08-25',
     buys: [{ qty: 30, price: 213.90 }],
     sells: [{ qty: 30, price: 278.14 }],
   },
@@ -447,6 +581,7 @@ const CLOSED_POSITIONS = [
     ticker: 'NBIS',
     status: 'Trimmed',
     date: '2026-09-09',
+    opened: '2026-08-03',
     buys: [{ qty: 50, price: 208.63 }],
     sells: [{ qty: 50, price: 246.28 }],
   },
@@ -454,6 +589,7 @@ const CLOSED_POSITIONS = [
     ticker: 'CRWD',
     status: 'Closed',
     date: '2026-09-08',
+    opened: '2026-08-28',
     buys: [
       { qty: 60.71, price: 215.07 },
       { qty: 0.01, price: 207.21 },
@@ -464,13 +600,18 @@ const CLOSED_POSITIONS = [
     ticker: 'AMZN',
     status: 'Closed',
     date: '2026-08-28',
+    opened: '2026-08-17',
     buys: [{ qty: 68.35, price: 263.37 }],
-    sells: [{ qty: 68.35, price: 266.57 }],
+    sells: [
+      { qty: 68.34, price: 266.57 },
+      { qty: 0.01, price: 266.64 },
+    ],
   },
   {
     ticker: 'VIAV',
     status: 'Trimmed',
     date: '2026-08-28',
+    opened: '2026-08-14',
     buys: [{ qty: 103, price: 43.02 }],
     sells: [{ qty: 103, price: 37.41 }],
   },
@@ -478,6 +619,7 @@ const CLOSED_POSITIONS = [
     ticker: 'CIEN',
     status: 'Trimmed',
     date: '2026-08-28',
+    opened: '2026-08-14',
     buys: [{ qty: 16, price: 429.61 }],
     sells: [{ qty: 16, price: 389.5 }],
   },
@@ -485,6 +627,7 @@ const CLOSED_POSITIONS = [
     ticker: 'IREN',
     status: 'Closed',
     date: '2026-08-14',
+    opened: '2026-08-03',
     buys: [{ qty: 271.73, price: 36.60 }],
     sells: [{ qty: 271.73, price: 44.58 }],
   },
@@ -492,57 +635,85 @@ const CLOSED_POSITIONS = [
     ticker: 'DRAM',
     status: 'Closed',
     date: '2026-08-14',
+    opened: '2026-08-03',
     buys: [{ qty: 158, price: 49.00 }],
     sells: [{ qty: 158, price: 58.02 }],
   },
   {
     ticker: 'MU',
     status: 'Closed',
-    date: '2026-08-15',
-    buys: [{ qty: 24.3, price: 783.26 }],
-    sells: [
-      { qty: 4.85, price: 975.58 },
-      { qty: 19.45, price: 999.60 },
-    ],
+    date: '2026-08-17',
+    opened: '2026-08-03',
+    buys: [{ qty: 19.45, price: 783.26 }],
+    sells: [{ qty: 19.45, price: 999.60 }],
+  },
+  {
+    ticker: 'MU',
+    status: 'Trimmed',
+    date: '2026-08-14',
+    opened: '2026-08-03',
+    buys: [{ qty: 4.85, price: 783.26 }],
+    sells: [{ qty: 4.85, price: 975.58 }],
   },
   {
     ticker: 'MRVL',
     status: 'Closed',
     date: '2026-08-25',
-    buys: [{ qty: 79.97, price: 181.30 }],
-    sells: [
-      { qty: 24.45, price: 222.25 },
-      { qty: 55.52, price: 242.61 },
-    ],
+    opened: '2026-08-03',
+    buys: [{ qty: 55.52, price: 181.30 }],
+    sells: [{ qty: 55.52, price: 242.61 }],
+  },
+  {
+    ticker: 'MRVL',
+    status: 'Trimmed',
+    date: '2026-08-14',
+    opened: '2026-08-03',
+    buys: [{ qty: 24.45, price: 181.30 }],
+    sells: [{ qty: 24.45, price: 222.25 }],
   },
   {
     ticker: 'LITE',
     status: 'Closed',
     date: '2026-08-28',
-    buys: [{ qty: 15.4, price: 687.06 }],
-    sells: [
-      { qty: 4.21, price: 890.00 },
-      { qty: 11.19, price: 915.07 },
-    ],
+    opened: '2026-08-03',
+    buys: [{ qty: 11.19, price: 687.06 }],
+    sells: [{ qty: 11.19, price: 915.07 }],
+  },
+  {
+    ticker: 'LITE',
+    status: 'Trimmed',
+    date: '2026-08-14',
+    opened: '2026-08-03',
+    buys: [{ qty: 4.21, price: 687.06 }],
+    sells: [{ qty: 4.21, price: 890.00 }],
   },
   {
     ticker: 'AXTI',
     status: 'Closed',
-    date: '2026-08-15',
+    date: '2026-08-17',
+    opened: '2026-08-03',
     buys: [
-      { qty: 165.48, price: 57.79 },
+      { qty: 49.64, price: 57.79 },
       { qty: 10.32, price: 77.66 },
     ],
+    sells: [{ qty: 59.96, price: 88.01 }],
+  },
+  {
+    ticker: 'AXTI',
+    status: 'Trimmed',
+    date: '2026-08-14',
+    opened: '2026-08-03',
+    buys: [{ qty: 115.84, price: 57.79 }],
     sells: [
       { qty: 69.4, price: 78.25 },
       { qty: 46.44, price: 77.68 },
-      { qty: 59.96, price: 88.01 },
     ],
   },
   {
     ticker: 'NBIS',
     status: 'Trimmed',
-    date: '2026-08-15',
+    date: '2026-08-17',
+    opened: '2026-08-03',
     buys: [{ qty: 7.9, price: 185.50 }],
     sells: [{ qty: 7.9, price: 272.82 }],
   },
@@ -573,22 +744,19 @@ function formatClosedDate(dateStr) {
 const NOTE_DAYS = 14;
 
 // Every buy on record for the positions still open, including the buys behind trades since closed (sells live
-// in CLOSED_POSITIONS). One row per fill: date, Opened or Added, shares, price, and an optional comment. The
-// comment is the little bubble: it shows beside the position for NOTE_DAYS after its date, and stays in the
-// ticker's history (click its slice in the allocation pie) for good.
-// Rows up to 2026-09-09 were rebuilt from the repo's own history, not typed from order screenshots: the date
-// is the day the position was updated here, an Opened price is the entry price, and an Added price is
-// back-solved from the change in the blended entry price. Each set, together with the sales in
-// CLOSED_POSITIONS, replays to the current size and entry.
+// in CLOSED_POSITIONS). One row per fill (same-day fills at one price are added together): date, Opened or
+// Added, shares, price, and an optional comment. The comment is the little bubble: it shows beside the
+// position for NOTE_DAYS after its date, and stays in the ticker's history (click its slice in the allocation
+// pie) for good. Dates and prices are the exact fills from the TradingView paper trading export of 2026-10-08.
 const TRADE_LOG = {
   INTC: [
     { date: '2026-08-17', kind: 'Opened', qty: 176.28, price: 102.16 },
-    { date: '2026-08-28', kind: 'Added', qty: 10, price: 91.54 },
+    { date: '2026-08-28', kind: 'Added', qty: 10, price: 91.62 },
   ],
   NBIS: [
     { date: '2026-08-03', kind: 'Opened', qty: 78.77, price: 185.5 },
-    { date: '2026-08-28', kind: 'Added', qty: 9, price: 210.97 },
-    { date: '2026-09-08', kind: 'Added', qty: 52.57, price: 239.41 },
+    { date: '2026-08-28', kind: 'Added', qty: 9, price: 210.98 },
+    { date: '2026-09-08', kind: 'Added', qty: 52.57, price: 239.4 },
   ],
   AAOI: [{ date: '2026-09-09', kind: 'Opened', qty: 136.64, price: 111.21 }],
   MU: [
@@ -599,7 +767,7 @@ const TRADE_LOG = {
       comment: 'Added 2.15 shares ($2,337) ahead of Samsung’s early Q3 figures on Thu 8 Oct, where the tone on memory prices and margins matters most for MU.',
     },
   ],
-  CIEN: [{ date: '2026-08-17', kind: 'Opened', qty: 40.42, price: 429.61 }],
+  CIEN: [{ date: '2026-08-14', kind: 'Opened', qty: 40.42, price: 429.61 }],
   SNDK: [
     { date: '2026-09-21', kind: 'Opened', qty: 5.77, price: 1780.99 },
     { date: '2026-10-06', kind: 'Added', qty: 0.59, price: 1676.5 },
@@ -749,26 +917,62 @@ function renderClosedPositions() {
     list.appendChild(li);
   });
 
-  renderWinRate();
+  renderTrackRecord();
 }
 
-// Win rate over every entry in CLOSED_POSITIONS (closes and trims alike, each one a realized trade), not
-// just the 3 shown. A win is a sale above the entry price.
-function renderWinRate() {
-  const el = document.getElementById('closedStats');
+// --- Track record ---
+// Five figures under Recently Closed, all from CLOSED_POSITIONS (every closed and trimmed entry is one
+// realized trade; open positions are not in any of them). Avg hold needs each entry's `opened` date.
+function computeTrackRecord() {
+  const rows = CLOSED_POSITIONS.map((pos) => {
+    const { gainPct, gainUsd } = computeClosedSummary(pos);
+    const days = pos.opened ? Math.round((Date.parse(pos.date) - Date.parse(pos.opened)) / 86400000) : null;
+    return { pct: gainPct, usd: gainUsd, days };
+  });
+  const mean = (a) => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : null);
+  const wins = rows.filter((r) => r.pct > 0);
+  const losses = rows.filter((r) => r.pct < 0);
+  const grossWin = wins.reduce((s, r) => s + r.usd, 0);
+  const grossLoss = -losses.reduce((s, r) => s + r.usd, 0);
+  return {
+    total: rows.length,
+    wins: wins.length,
+    winRate: rows.length ? (wins.length / rows.length) * 100 : null,
+    avgWin: mean(wins.map((r) => r.pct)),
+    avgLoss: mean(losses.map((r) => r.pct)),
+    profitFactor: grossLoss > 0 ? grossWin / grossLoss : null,
+    avgHold: mean(rows.filter((r) => r.days != null).map((r) => r.days)),
+  };
+}
+
+function renderTrackRecord() {
+  const el = document.getElementById('trackRow');
   if (!el || CLOSED_POSITIONS.length === 0) return;
-  const total = CLOSED_POSITIONS.length;
-  const wins = CLOSED_POSITIONS.filter((pos) => computeClosedSummary(pos).gainPct > 0).length;
+  const tr = computeTrackRecord();
+  const pct = (n, plus) => (n == null ? '\u2014' : `${plus && n > 0 ? '+' : ''}${n.toFixed(1)}%`);
+  const cells = [
+    { label: 'Win rate', value: tr.winRate == null ? '\u2014' : `${Math.round(tr.winRate)}%`, title: `${tr.wins} of ${tr.total} trades` },
+    { label: 'Profit factor', value: tr.profitFactor == null ? '\u2014' : `${tr.profitFactor.toFixed(1)}x`, title: 'Total won divided by total lost, on closed trades' },
+    { label: 'Avg win', value: pct(tr.avgWin, true), tone: 'pos' },
+    { label: 'Avg loss', value: pct(tr.avgLoss), tone: 'neg' },
+    { label: 'Avg hold', value: tr.avgHold == null ? '\u2014' : `${Math.round(tr.avgHold)} days`, title: 'Average days a position was held, from its first buy' },
+  ];
 
   el.innerHTML = '';
-  const label = document.createElement('span');
-  label.className = 'closed-stats-label';
-  label.textContent = 'Win rate';
-  const value = document.createElement('span');
-  value.className = 'closed-stats-value';
-  value.innerHTML = `${Math.round((wins / total) * 100)}% <span class="closed-usd">(${wins} of ${total} trades)</span>`;
-  el.appendChild(label);
-  el.appendChild(value);
+  cells.forEach((c) => {
+    const cell = document.createElement('div');
+    cell.className = 'track-cell';
+    if (c.title) cell.title = c.title;
+    const label = document.createElement('span');
+    label.className = 'track-label';
+    label.textContent = c.label;
+    const value = document.createElement('span');
+    value.className = `track-value ${c.tone || ''}`;
+    value.textContent = c.value;
+    cell.appendChild(label);
+    cell.appendChild(value);
+    el.appendChild(cell);
+  });
 }
 
 // --- Allocation pie chart ---
@@ -1197,6 +1401,7 @@ function refreshHistory() {
   setStat(historyEls.realized, hasRealized ? realized : null);
   setStat(historyEls.open, open.unrealized);
   setStat(historyEls.net, realized + open.unrealized);
+  historyEls.weight.textContent = `${Math.round(open.p.weight)}%`;
   historyEls.holding.textContent = `Holding ${fmtQty(open.qty)} sh at ${fmtPrice(open.p.entryPrice)} · now ${fmtPrice(open.p.currentPrice)}`;
 }
 
@@ -1232,8 +1437,14 @@ function openHistory(ticker) {
   close.setAttribute('aria-label', 'Close history');
   close.textContent = '×';
   close.addEventListener('click', closeHistory);
+  const weight = document.createElement('span');
+  weight.className = 'history-weight';
+  const headRight = document.createElement('span');
+  headRight.className = 'history-head-right';
+  headRight.appendChild(weight);
+  headRight.appendChild(close);
   head.appendChild(title);
-  head.appendChild(close);
+  head.appendChild(headRight);
 
   const holding = document.createElement('div');
   holding.className = 'history-holding';
@@ -1288,7 +1499,7 @@ function openHistory(ticker) {
   [...card.querySelectorAll('.history-head, .history-holding, .history-stats, .history-list > li')].forEach((el, i) => {
     el.style.setProperty('--d', `${120 + i * 50}ms`);
   });
-  historyEls = { realized: realized.value, open: openStat.value, net: net.value, holding };
+  historyEls = { realized: realized.value, open: openStat.value, net: net.value, holding, weight };
   refreshHistory();
 
   panel.classList.add('open');
@@ -1605,6 +1816,7 @@ async function init() {
 async function tick() {
   await init();
   updateMarketStatus();
+  updateStars(false);
 }
 
 // --- Load-in ---
