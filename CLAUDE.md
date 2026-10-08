@@ -368,14 +368,11 @@ Built from `TRADE_FILLS` with the same entry-cost weights the pie uses, and ever
 through its size on each trading day (`replayCurve`). The last frame is today's real pie. Esc, or `r` again, stops it.
 CBOE:RAM and OMXSTO:SIVE are not in `TRADE_FILLS` on purpose.
 
-## Daily returns calendar
+## Daily returns calendar (REMOVED 2026-10-08)
 
-Under Benchmarks: a calendar, one week per row (Mon to Fri). Each day shows its date and its close-to-close
-return, tinted sage or rust by size, today outlined, with the week's return at the end of the row. **The dollar P&L
-shows only on hover** (the percentage nudges up to make room), or on a tap on a touch screen, which stays open through the
-20 second refresh until the next tap. Days cannot be selected, focused or highlighted by clicking (`user-select: none`, no tab stops), and a market holiday says
-"closed" until hovered, then its name (Labor Day, Thanksgiving...). Days with no history (before Aug 12, and the part-day Aug 12 itself, which starts at 3:45pm ET so has no prior close) and a week with no prior close say "no data", never a dash. A day's return
-is the last logged point of the day against the last point of the day before. It is drawn from the history the page already has, so nothing is stored.
+Valerio removed it because it looked bad while the portfolio's gain happened before the chart history starts.
+He wants it back once the portfolio improves. **To restore it:** `git revert` the removal commit, or look at the git
+tag `heatmap-calendar` (the last version with it). Notes are in Claude's memory too.
 
 ## Market clock (no bell)
 

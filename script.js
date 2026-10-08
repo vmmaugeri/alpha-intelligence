@@ -1944,132 +1944,8 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// --- Daily returns heatmap ---
-// One small square per trading day, Monday to Friday down and one week per column, shaded by that day's return
-// (sage for up, rust for down). A day counts as a close-to-close move. Market holidays, which the history logger
-// records as a flat line, and the first day (a part day) are left empty.
+// Used by the replay and the market clock. (The daily returns calendar was removed on 2026-10-08, see CLAUDE.md.)
 const etDateFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }); // YYYY-MM-DD
-
-function dailyReturns(history, currentValue) {
-  const days = [];
-  history.forEach((h) => {
-    const date = etDateFormat.format(new Date(h.t));
-    const last = days[days.length - 1];
-    if (last && last.date === date) last.close = h.value;
-    else days.push({ date, close: h.value });
-  });
-  const lastDay = days[days.length - 1];
-  if (currentValue != null && lastDay && lastDay.date === etDateFormat.format(new Date()) && isMarketOpen()) {
-    lastDay.close = currentValue;
-  }
-  return days.map((d, i) => {
-    if (i === 0) return { date: d.date, close: d.close, ret: null, usd: 0 };
-    const diff = d.close - days[i - 1].close;
-    return { date: d.date, close: d.close, ret: Math.abs(diff) < 0.005 ? null : (diff / days[i - 1].close) * 100, usd: diff };
-  });
-}
-
-let heatSignature = null;
-
-// On a touch screen there is no hover, so a tap shows a day's dollars (or a holiday's name) and the next tap
-// somewhere else hides them again. With a mouse, hovering does it and clicking does nothing.
-let heatShown = null; // the date of the day whose dollars a tap is showing
-
-function attachHeatmapTap() {
-  const grid = document.getElementById('heatGrid');
-  if (!grid) return;
-  grid.addEventListener('click', (e) => {
-    if (!window.matchMedia('(hover: none)').matches) return;
-    const cell = e.target.closest('.heat-cell.has-tip');
-    const shown = grid.querySelector('.heat-cell.show');
-    if (shown) shown.classList.remove('show');
-    heatShown = cell && cell !== shown ? cell.dataset.date : null;
-    if (heatShown) cell.classList.add('show');
-  });
-}
-
-function renderHeatmap() {
-  const wrap = document.getElementById('heat');
-  const grid = document.getElementById('heatGrid');
-  if (!wrap || !grid || lastHistory.length === 0) return;
-  const days = dailyReturns(lastHistory, lastCurrentValue);
-  const byDate = Object.fromEntries(days.map((d) => [d.date, d]));
-  const signature = days.map((d) => `${d.date}:${d.ret == null ? '-' : d.ret.toFixed(3)}`).join('|');
-  if (signature === heatSignature) return;
-  heatSignature = signature;
-
-  const utc = (str) => new Date(`${str}T12:00:00Z`);
-  const first = utc(days[0].date);
-  const monday = new Date(first.getTime() - ((first.getUTCDay() + 6) % 7) * 86400000);
-  const lastDate = utc(days[days.length - 1].date);
-  const weeks = Math.floor((lastDate - monday) / (7 * 86400000)) + 1;
-  const todayKey = etDateFormat.format(new Date());
-  const make = (tag, cls, text) => {
-    const el = document.createElement(tag);
-    if (cls) el.className = cls;
-    if (text != null) el.textContent = text;
-    return el;
-  };
-
-  grid.innerHTML = '';
-  ['M', 'T', 'W', 'T', 'F', 'Week'].forEach((label) => grid.appendChild(make('span', 'heat-head', label)));
-
-  let lastMonth = '';
-  let up = 0;
-  let down = 0;
-  let prevEnd = null; // the close that ended the week before
-  for (let w = 0; w < weeks; w++) {
-    const weekStart = new Date(monday.getTime() + w * 7 * 86400000);
-    // A week is filed under the month its Thursday falls in, so Aug 31 to Sep 4 sits under September.
-    const month = new Date(weekStart.getTime() + 3 * 86400000).toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' });
-    if (month !== lastMonth) {
-      lastMonth = month;
-      grid.appendChild(make('span', 'heat-month', month));
-    }
-    let endClose = null;
-    for (let r = 0; r < 5; r++) {
-      const date = new Date(weekStart.getTime() + r * 86400000);
-      const key = date.toISOString().slice(0, 10);
-      const day = byDate[key];
-      const cell = make('div', 'heat-cell');
-      cell.dataset.date = key;
-      if (key === heatShown) cell.classList.add('show'); // keeps a tapped day open through the 20 second refresh
-      cell.appendChild(make('span', 'heat-num', String(date.getUTCDate())));
-      if (!day) {
-        cell.classList.add(date > lastDate ? 'future' : 'none');
-        if (date <= lastDate) cell.appendChild(make('span', 'heat-note', 'no data'));
-      } else {
-        endClose = day.close;
-        if (key === todayKey) cell.classList.add('today');
-        if (NYSE_HOLIDAYS[key]) {
-          cell.classList.add('none', 'has-tip');
-          cell.appendChild(make('span', 'heat-note', 'closed'));
-          cell.appendChild(make('span', 'heat-name', NYSE_HOLIDAYS[key]));
-        } else if (day.ret == null) {
-          cell.classList.add('none');
-          cell.appendChild(make('span', 'heat-note', 'no data'));
-        } else {
-          cell.classList.add(day.ret > 0 ? 'up' : 'down');
-          cell.style.setProperty('--o', (0.1 + 0.45 * Math.min(1, Math.abs(day.ret) / 6)).toFixed(2));
-          cell.classList.add('has-tip');
-          cell.appendChild(make('span', 'heat-pct', fmtSignedPct(day.ret)));
-          cell.appendChild(make('span', 'heat-usd', fmtSignedUsd(day.usd)));
-          if (day.ret > 0) up++;
-          else down++;
-        }
-      }
-      grid.appendChild(cell);
-    }
-    const weekRet = prevEnd != null && endClose != null ? ((endClose - prevEnd) / prevEnd) * 100 : null;
-    const weekCell = make('span', 'heat-week', weekRet == null ? 'no data' : fmtSignedPct(weekRet));
-    if (weekRet == null) weekCell.classList.add('empty');
-    else weekCell.classList.add(weekRet >= 0 ? 'up' : 'down');
-    grid.appendChild(weekCell);
-    if (endClose != null) prevEnd = endClose;
-  }
-  document.getElementById('heatCount').textContent = `${up} up · ${down} down`;
-  wrap.hidden = false;
-}
 
 // --- Replay ---
 // Press r and the pie goes back in time and plays the portfolio forward to today.
@@ -2599,12 +2475,6 @@ async function init() {
     }
 
     try {
-      renderHeatmap();
-    } catch (heatErr) {
-      console.error(heatErr);
-    }
-
-    try {
       renderBenchmarks(data);
     } catch (benchErr) {
       console.error(benchErr);
@@ -2679,7 +2549,6 @@ const firstTick = tick();
 attachThemeToggle();
 attachChartInteractivity();
 attachPieInteractivity();
-attachHeatmapTap();
 attachRangeButtons();
 renderClosedPositions();
 layoutSideNotes();
