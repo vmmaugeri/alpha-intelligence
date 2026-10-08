@@ -594,6 +594,9 @@ a.closed-ticker:focus-visible {
 }
 
 .heat {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr)) 46px;
   gap: 4px;
@@ -665,7 +668,7 @@ a.closed-ticker:focus-visible {
   transition: transform 0.18s ease;
 }
 
-/* The dollars (and a holiday's name) show on hover, tap or keyboard focus. */
+/* The dollars (and a holiday's name) show on hover, or on a tap on a touch screen. Days cannot be selected. */
 .heat-usd {
   position: absolute;
   right: 0;
@@ -679,22 +682,17 @@ a.closed-ticker:focus-visible {
 }
 
 .heat-cell.has-tip:hover .heat-pct,
-.heat-cell.has-tip:focus .heat-pct {
+.heat-cell.show .heat-pct {
   transform: translateY(-5px);
 }
 
 .heat-cell.has-tip:hover .heat-usd,
-.heat-cell.has-tip:focus .heat-usd {
+.heat-cell.show .heat-usd {
   opacity: 0.85;
 }
 
 .heat-cell.has-tip {
   cursor: default;
-}
-
-.heat-cell:focus {
-  border-color: var(--ink);
-  outline: none;
 }
 
 .heat-note,
@@ -712,12 +710,12 @@ a.closed-ticker:focus-visible {
 }
 
 .heat-cell.has-tip:hover .heat-note,
-.heat-cell.has-tip:focus .heat-note {
+.heat-cell.show .heat-note {
   display: none;
 }
 
 .heat-cell.has-tip:hover .heat-name,
-.heat-cell.has-tip:focus .heat-name {
+.heat-cell.show .heat-name {
   display: block;
 }
 
@@ -748,63 +746,6 @@ a.closed-ticker:focus-visible {
 
 .heat-week.down {
   color: var(--negative);
-}
-
-/* Replay (r): the date and what was traded, over the top left of the pie, and a thin progress line. */
-.allocation-wrap .pie-wrap {
-  transition: margin-top 0.4s ease;
-}
-
-.allocation-wrap.replaying .pie-wrap {
-  margin-top: 62px;
-}
-
-.replay-hud {
-  position: absolute;
-  top: -58px;
-  left: 2px;
-  z-index: 1;
-  pointer-events: none;
-  animation: fadeUp 0.5s ease;
-}
-
-.replay-date {
-  font-size: 24px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 1.1;
-}
-
-.replay-note {
-  max-width: 230px;
-  margin-top: 4px;
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--muted);
-}
-
-.replay-bar {
-  position: absolute;
-  right: 2px;
-  bottom: 0;
-  left: 2px;
-  height: 1px;
-  background: var(--hairline);
-  pointer-events: none;
-}
-
-.replay-bar-fill {
-  height: 1px;
-  width: 0;
-  background: var(--ink);
-}
-
-.replay-tick {
-  position: absolute;
-  bottom: -2px;
-  width: 1px;
-  height: 5px;
-  background: var(--muted);
 }
 
 .pie-wrap {
@@ -1249,7 +1190,6 @@ li.note-left > .note.note-pop {
   .js .rise.in { animation: none; }
   .js .note.note-wait { opacity: 1; }
   .history { transition: none; }
-  .replay-hud { animation: none; }
   .history.open .history-head,
   .history.open .history-holding,
   .history.open .history-stats,

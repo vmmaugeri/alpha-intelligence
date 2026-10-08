@@ -308,32 +308,33 @@ touching any of it:
 
 ## Hidden keyboard shortcuts (keep this list up to date as they change)
 
-No hint anywhere on the page, deliberately. None of them scrolls or jumps: each only changes something already on
-screen and does nothing when what it controls is out of view. Ignored while typing and with ⌘/Ctrl/Alt held. All in
-the "Hidden keyboard shortcuts" block of `script.js`.
+No hint anywhere on the page, deliberately. None of them scrolls or jumps. Ignored while typing and with ⌘/Ctrl/Alt held.
+All in the "Hidden keyboard shortcuts" block of `script.js`.
 
 - `d`: switch dark and light.
-- `←` / `→`: step the chart range (24H, 1W, 1M, All), only while the chart is on screen.
-- `↑` / `↓`: flip to the previous or next ticker, only while a ticker's history card is open (the arrows scroll as
-  normal otherwise).
 - `r`: replay (again, or Esc, stops it).
-- **Konami code** (↑ ↑ ↓ ↓ ← → ← → B A): a meteor shower, about 10 seconds of shooting stars, dark mode only. If the
-  stars are not up (market open) they come down for it and leave afterwards. While the code is typed the range
-  arrows stand down so the chart does not change.
-- Not built, by choice: j/k, `$` for dollar view, 1 to 4 for the range, a `?` cheat sheet or hint line.
+- **Konami code** (↑ ↑ ↓ ↓ ← → ← → B A): a meteor shower, about 10 seconds of shooting stars, dark mode only (in light mode
+  nothing happens, on purpose). If the stars are not up (market open) they come down for it and leave afterwards. A held
+  key (key repeat) is ignored so it cannot break the code.
+- The arrow keys do nothing else, so they scroll the page as normal. **Removed on 2026-10-08 at Valerio's request:**
+  left/right stepping the chart range and up/down flipping tickers on the pie card. Do not bring them back.
+- Not built, by choice: j/k, `$` for a dollar view, 1 to 4 for the range, a `?` cheat sheet or hint line.
 
 ## Replay (press r)
 
-The pie rewinds to the first trading day and plays forward one day at a time (~1.5s per day, 11 days, ~19s), with the
-date and what was traded above the pie and a progress line below. Built from `TRADE_FILLS` with the same entry-cost
-weights the pie uses, and the last frame equals the real pie. Slices keep today's order so nothing jumps at the end.
-Dust fills (under $100) are left out of the caption only. CBOE:RAM and OMXSTO:SIVE are not in `TRADE_FILLS` on purpose.
+The pie glides back to the first day and then forward through the whole portfolio to today, as **one continuous
+motion**: no pauses on trading days, and nothing else on screen (no dates, captions or timeline, Valerio's call).
+~2.3s per trading day, 11 days, about 25s. Built from `TRADE_FILLS` with the same entry-cost weights the pie uses; each
+slice follows a smooth monotone curve through its size on every trading day (`replayCurve`), the first and last frames
+are today's real pie, and slices keep today's order so nothing jumps. Esc, or `r` again, stops it. CBOE:RAM and
+OMXSTO:SIVE are not in `TRADE_FILLS` on purpose.
 
 ## Daily returns calendar
 
 Under Benchmarks: a calendar, one week per row (Mon to Fri). Each day shows its date and its close-to-close
 return, tinted sage or rust by size, today outlined, with the week's return at the end of the row. **The dollar P&L
-shows only on hover, tap or keyboard focus** (the percentage nudges up to make room), and a market holiday says
+shows only on hover** (the percentage nudges up to make room), or on a tap on a touch screen, which stays open through the
+20 second refresh until the next tap. Days cannot be selected, focused or highlighted by clicking (`user-select: none`, no tab stops), and a market holiday says
 "closed" until hovered, then its name (Labor Day, Thanksgiving...). The first part-day is left blank. A day's return
 is the last logged point of the day against the last point of the day before. day against the last point of the day before. It is drawn from the history the page already has, so nothing is stored.
 

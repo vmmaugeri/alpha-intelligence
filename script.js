@@ -1752,26 +1752,18 @@ function closeHistory() {
 }
 
 // --- Hidden keyboard shortcuts ---
-// No hint anywhere on the page. None of them scrolls the page or jumps anywhere: each one only changes something
-// that is already on screen, and does nothing when what it controls is out of view.
+// No hint anywhere on the page. None of them scrolls the page or jumps anywhere.
 //   d          switch dark and light
-//   left/right step the chart range (24H, 1W, 1M, All), only while the chart is on screen
-//   up/down    flip to the previous or next ticker, only while a ticker's history card is open
 //   r          replay the portfolio (again, or Esc, stops it)
-const RANGE_ORDER = ['24H', '1W', '1M', 'All'];
-
-function onScreen(el, margin) {
-  if (!el) return false;
-  const r = el.getBoundingClientRect();
-  return r.bottom > margin && r.top < window.innerHeight - margin;
-}
-
+//   up up down down left right left right b a   the Konami code: a meteor shower (dark mode only)
+// The arrow keys do nothing else, so they keep scrolling the page as normal.
 document.addEventListener('keydown', (e) => {
   if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
   const t = e.target;
   if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
 
   const typed = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (e.repeat && konamiAt > 0) return; // a held key must not break the code
   if (typed === KONAMI[konamiAt]) {
     konamiAt++;
     if (konamiAt === KONAMI.length) {
@@ -1787,19 +1779,6 @@ document.addEventListener('keydown', (e) => {
     if (e.repeat) return;
     const dark = document.documentElement.getAttribute('data-theme') === 'dark';
     applyTheme(dark ? 'light' : 'dark', true);
-  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-    if (konamiAt >= 5 || !onScreen(document.getElementById('chart'), 60)) return; // not while the code is typed
-    const next = RANGE_ORDER.indexOf(selectedRange) + (e.key === 'ArrowRight' ? 1 : -1);
-    if (next < 0 || next >= RANGE_ORDER.length) return;
-    const button = document.querySelector(`.range-btn[data-range="${RANGE_ORDER[next]}"]`);
-    if (button) button.click();
-  } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && pieSelected && pieState && !replay) {
-    const list = pieState.positions;
-    const at = list.findIndex((p) => p.ticker === pieSelected);
-    const next = at + (e.key === 'ArrowDown' ? 1 : -1);
-    if (at === -1 || next < 0 || next >= list.length) return;
-    e.preventDefault(); // while a card is open the arrows flip tickers instead of scrolling
-    openHistory(list[next].ticker);
   } else if (e.key === 'r' || e.key === 'R') {
     if (e.repeat) return;
     toggleReplay();
@@ -1834,6 +1813,23 @@ function dailyReturns(history, currentValue) {
 }
 
 let heatSignature = null;
+
+// On a touch screen there is no hover, so a tap shows a day's dollars (or a holiday's name) and the next tap
+// somewhere else hides them again. With a mouse, hovering does it and clicking does nothing.
+let heatShown = null; // the date of the day whose dollars a tap is showing
+
+function attachHeatmapTap() {
+  const grid = document.getElementById('heatGrid');
+  if (!grid) return;
+  grid.addEventListener('click', (e) => {
+    if (!window.matchMedia('(hover: none)').matches) return;
+    const cell = e.target.closest('.heat-cell.has-tip');
+    const shown = grid.querySelector('.heat-cell.show');
+    if (shown) shown.classList.remove('show');
+    heatShown = cell && cell !== shown ? cell.dataset.date : null;
+    if (heatShown) cell.classList.add('show');
+  });
+}
 
 function renderHeatmap() {
   const wrap = document.getElementById('heat');
@@ -1879,6 +1875,8 @@ function renderHeatmap() {
       const key = date.toISOString().slice(0, 10);
       const day = byDate[key];
       const cell = make('div', 'heat-cell');
+      cell.dataset.date = key;
+      if (key === heatShown) cell.classList.add('show'); // keeps a tapped day open through the 20 second refresh
       cell.appendChild(make('span', 'heat-num', String(date.getUTCDate())));
       if (!day) {
         cell.classList.add(date > lastDate ? 'future' : 'none');
@@ -1887,7 +1885,6 @@ function renderHeatmap() {
         if (key === todayKey) cell.classList.add('today');
         if (NYSE_HOLIDAYS[key]) {
           cell.classList.add('none', 'has-tip');
-          cell.tabIndex = 0;
           cell.appendChild(make('span', 'heat-note', 'closed'));
           cell.appendChild(make('span', 'heat-name', NYSE_HOLIDAYS[key]));
         } else if (day.ret == null) {
@@ -1897,7 +1894,6 @@ function renderHeatmap() {
           cell.classList.add(day.ret > 0 ? 'up' : 'down');
           cell.style.setProperty('--o', (0.1 + 0.45 * Math.min(1, Math.abs(day.ret) / 6)).toFixed(2));
           cell.classList.add('has-tip');
-          cell.tabIndex = 0;
           cell.appendChild(make('span', 'heat-pct', fmtSignedPct(day.ret)));
           cell.appendChild(make('span', 'heat-usd', fmtSignedUsd(day.usd)));
           if (day.ret > 0) up++;
@@ -1917,18 +1913,18 @@ function renderHeatmap() {
 }
 
 // --- Replay ---
-// Press r and the pie rewinds to the first day and plays the whole portfolio forward, one trading day at a time:
-// slices grow, shrink, appear and leave as the trades happen, with the date and what was traded on it. Built from
-// TRADE_FILLS; weights are the same entry-cost weights the pie normally shows.
-const REPLAY_STEP_MS = 1500;
+// Press r and the pie glides back to the first day and then forward through the whole portfolio to today: slices
+// swell, shrink, appear and slide away as the trades happen, one continuous motion with no pauses, no labels and
+// no dates. Built from TRADE_FILLS with the same entry-cost weights the pie normally shows, and the
+// last frame is the real pie.
+const REPLAY_STEP_MS = 2300; // time to glide from one trading day's portfolio to the next
 let replay = null;
 
 function replaySteps() {
   const dates = [...new Set(TRADE_FILLS.map((f) => f[0]))].sort();
   const hold = {};
   return dates.map((date) => {
-    const today = TRADE_FILLS.filter((f) => f[0] === date);
-    today.forEach(([, ticker, side, qty, price]) => {
+    TRADE_FILLS.filter((f) => f[0] === date).forEach(([, ticker, side, qty, price]) => {
       const h = hold[ticker] || (hold[ticker] = { qty: 0, cost: 0 });
       if (side === 'B') {
         h.qty += qty;
@@ -1944,9 +1940,7 @@ function replaySteps() {
     Object.entries(hold).forEach(([ticker, h]) => {
       if (h.qty > 0.005) weights[ticker] = (h.cost / total) * 100;
     });
-    // Dust (a $2 sliver) is left out of the caption, though it still counts in the weights.
-    const uniq = (side) => [...new Set(today.filter((f) => f[2] === side && f[3] * f[4] >= 100).map((f) => f[1]))];
-    return { date, weights, bought: uniq('B'), sold: uniq('S') };
+    return { date, weights };
   });
 }
 
@@ -1958,25 +1952,32 @@ function replayOrder(steps) {
   return order;
 }
 
-function replayFrame(t, steps, order) {
-  const i = Math.max(0, Math.min(steps.length - 1, Math.floor(t / REPLAY_STEP_MS)));
-  const f = Math.max(0, Math.min(1, (t - i * REPLAY_STEP_MS) / REPLAY_STEP_MS));
-  const x = Math.max(0, Math.min(1, f / 0.55));
-  const k = x * x * (3 - 2 * x); // ease in and out while the slices move, then hold
-  const prev = i > 0 ? steps[i - 1].weights : {};
-  const cur = steps[i].weights;
-  const positions = order
-    .map((ticker) => ({ ticker, weight: (prev[ticker] || 0) + ((cur[ticker] || 0) - (prev[ticker] || 0)) * k }))
-    .filter((p) => p.weight > 0.6);
-  return { i, positions, step: steps[i] };
+// A smooth curve through one slice's size on each trading day (a monotone cubic, so it never swings below zero or
+// overshoots), which keeps every slice moving without ever stopping on a trading day.
+function replayCurve(ys) {
+  const n = ys.length;
+  const d = ys.slice(1).map((y, i) => y - ys[i]);
+  const m = new Array(n).fill(0);
+  m[0] = d[0];
+  m[n - 1] = d[n - 2];
+  for (let k = 1; k < n - 1; k++) {
+    m[k] = d[k - 1] * d[k] <= 0 ? 0 : (2 * d[k - 1] * d[k]) / (d[k - 1] + d[k]);
+  }
+  return (x) => {
+    const i = Math.min(n - 2, Math.max(0, Math.floor(x)));
+    const u = x - i;
+    const u2 = u * u;
+    const u3 = u2 * u;
+    return (
+      (2 * u3 - 3 * u2 + 1) * ys[i] + (u3 - 2 * u2 + u) * m[i] + (-2 * u3 + 3 * u2) * ys[i + 1] + (u3 - u2) * m[i + 1]
+    );
+  };
 }
 
-function replayCaption(step) {
-  const list = (tickers) => (tickers.length > 4 ? `${tickers.slice(0, 3).join(', ')} +${tickers.length - 3}` : tickers.join(', '));
-  const parts = [];
-  if (step.sold.length) parts.push(`Sold ${list(step.sold)}`);
-  if (step.bought.length) parts.push(`Bought ${list(step.bought)}`);
-  return parts.join(' \u00b7 ');
+function replayPositions(x, curves) {
+  return curves
+    .map((c) => ({ ticker: c.ticker, weight: Math.max(0, c.at(x)) }))
+    .filter((p) => p.weight > 0.35);
 }
 
 function startReplay() {
@@ -1985,66 +1986,38 @@ function startReplay() {
   if (replay || !section || section.hidden || !wrap || lastPositions.length === 0) return;
   closeHistory();
   const steps = replaySteps();
-  const order = replayOrder(steps);
-
-  const hud = document.createElement('div');
-  hud.className = 'replay-hud';
-  hud.innerHTML = '<div class="replay-date"></div><div class="replay-note"></div>';
-  const bar = document.createElement('div');
-  bar.className = 'replay-bar';
-  const fill = document.createElement('div');
-  fill.className = 'replay-bar-fill';
-  bar.appendChild(fill);
-  steps.forEach((_, i) => {
-    const tick = document.createElement('span');
-    tick.className = 'replay-tick';
-    tick.style.left = `${((i + 1) / steps.length) * 100}%`;
-    bar.appendChild(tick);
-  });
-  wrap.appendChild(hud);
-  wrap.appendChild(bar);
-  section.classList.add('replaying'); // makes room above the pie for the date and caption
+  // the first keyframe is today's pie, so it glides back to the first day and then forward again to today
+  const today = steps[steps.length - 1];
+  const curves = replayOrder(steps).map((ticker) => ({
+    ticker,
+    at: replayCurve([today, ...steps].map((s) => s.weights[ticker] || 0)),
+  }));
 
   const r = wrap.getBoundingClientRect();
   if (r.top < 60 || r.bottom > window.innerHeight - 20) wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-  replay = { steps, order, hud, bar, fill, start: performance.now() + 500, frame: null, shown: -1 };
+  replay = { steps, curves, start: performance.now() + 400, frame: null };
   pieHover = null;
   const tooltip = document.getElementById('pieTooltip');
   if (tooltip) tooltip.style.opacity = '0';
   replay.frame = requestAnimationFrame(replayLoop);
 }
 
-function renderReplayAt(t) {
-  const { i, positions, step } = replayFrame(t, replay.steps, replay.order);
-  drawPie(positions, null);
-  if (replay.shown !== i) {
-    replay.shown = i;
-    replay.hud.querySelector('.replay-date').textContent = formatClosedDate(step.date);
-    replay.hud.querySelector('.replay-note').textContent = replayCaption(step);
-  }
-  replay.fill.style.width = `${Math.min(100, (Math.max(0, t) / (replay.steps.length * REPLAY_STEP_MS)) * 100)}%`;
-}
-
 function replayLoop(now) {
   if (!replay) return;
   const t = now - replay.start;
-  const total = replay.steps.length * REPLAY_STEP_MS;
-  if (t > total + 1600) {
+  const total = replay.steps.length * REPLAY_STEP_MS; // one glide back, then one per trading day
+  if (t > total + 1200) {
     stopReplay();
     return;
   }
-  if (t >= 0) renderReplayAt(Math.min(t, total - 1));
-  else drawPie([], null);
+  drawPie(replayPositions(Math.max(0, Math.min(t, total)) / REPLAY_STEP_MS, replay.curves), null);
   replay.frame = requestAnimationFrame(replayLoop);
 }
 
 function stopReplay() {
   if (!replay) return;
   cancelAnimationFrame(replay.frame);
-  replay.hud.remove();
-  replay.bar.remove();
-  document.getElementById('allocation').classList.remove('replaying');
   replay = null;
   pieSignature = null; // draw the real pie again
   if (lastPositions.length) renderPie(lastPositions);
@@ -2393,6 +2366,7 @@ const firstTick = tick();
 attachThemeToggle();
 attachChartInteractivity();
 attachPieInteractivity();
+attachHeatmapTap();
 attachRangeButtons();
 renderClosedPositions();
 layoutSideNotes();
