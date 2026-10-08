@@ -1288,8 +1288,9 @@ function layoutPie(positions, width, height, ctx, insideOnly) {
           if (fits(s, x, y, hw * mid, hh * mid)) lo = mid;
           else hi = mid;
         }
-        // fully visible exactly when the name fits (that is what the real pie shows), fading in over the last ~18%
-        const room = Math.max(0, Math.min(1, (lo - 0.82) / 0.18));
+        // fully visible exactly when the name fits (that is what the real pie shows), starting to show only once it is
+        // nearly there, so the names of two small neighbouring slices never overlap
+        const room = Math.max(0, Math.min(1, (lo - 0.9) / 0.09));
         return { inside: true, hidden: room <= 0.01, alpha: room * room * (3 - 2 * room), align: 'center', tx: x, ty: y };
       }
       for (const f of [0.66, 0.74, 0.58, 0.82, 0.5]) {
@@ -1456,15 +1457,61 @@ function drawPie(positions, hoverIndex, insideOnly, fade) {
 
   ctx.font = font;
   ctx.textBaseline = 'alphabetic';
+  // The replay's names (see layoutPie): work out where each one is drawn and how visible it is meant to be.
+  let nameTargets = null;
+  if (fade) {
+    nameTargets = labels.map((l, i) => {
+      const key = positions[i].ticker;
+      let alpha = l.hidden ? 0 : l.alpha == null ? 1 : l.alpha;
+      // A name that swaps places with its neighbour (the pie is kept largest first) is moved smoothly: the jump is
+      // absorbed into an offset that then fades away, and the name dims while it is on its way.
+      const p = fade.pos[key] || (fade.pos[key] = { tx: l.tx, ty: l.ty, ox: 0, oy: 0 });
+      const jx = l.tx - p.tx;
+      const jy = l.ty - p.ty;
+      if (Math.hypot(jx, jy) > 24) {
+        p.ox -= jx;
+        p.oy -= jy;
+      }
+      p.tx = l.tx;
+      p.ty = l.ty;
+      const settle = Math.exp(-fade.dt / 380);
+      p.ox *= settle;
+      p.oy *= settle;
+      alpha *= Math.pow(Math.max(0, 1 - Math.hypot(p.ox, p.oy) / 46), 2);
+      return { x: l.tx + p.ox, y: l.ty + p.oy, alpha, w: ctx.measureText(key).width };
+    });
+    // If two names would touch, the one on the smaller slice (the later one, the pie being largest first) steps
+    // aside until there is room. Its fade is eased below, so it never flicks.
+    for (let a = 0; a < nameTargets.length; a++) {
+      for (let b = a + 1; b < nameTargets.length; b++) {
+        const A = nameTargets[a];
+        const B = nameTargets[b];
+        if (A.alpha < 0.05 || B.alpha < 0.05) continue;
+        if (Math.abs(A.x - B.x) - (A.w + B.w) / 2 - 4 < 0 && Math.abs(A.y - B.y) - textH - 3 < 0) B.alpha = 0;
+      }
+    }
+  }
+
   labels.forEach((l, i) => {
-    let nameAlpha = l.hidden ? 0 : l.alpha == null ? 1 : l.alpha;
-    if (fade) {
-      // the replay: a name eases toward being shown or hidden, so it can never flick on or off
-      const now = fade.state[positions[i].ticker];
-      nameAlpha = (now == null ? nameAlpha : now) + (nameAlpha - (now == null ? nameAlpha : now)) * fade.k;
-      fade.state[positions[i].ticker] = nameAlpha;
+    let nameAlpha;
+    let nameX = l.tx;
+    let nameY = l.ty;
+    if (nameTargets) {
+      const t = nameTargets[i];
+      const key = positions[i].ticker;
+      nameX = t.x;
+      nameY = t.y;
+      // a name eases toward being shown or hidden, so it can never flick on or off
+      const now = fade.state[key];
+      // (fading out is quicker than fading in, so a name that has to step aside is gone before its neighbour arrives)
+      const rate = t.alpha < (now == null ? t.alpha : now) ? fade.kDown || fade.k : fade.k;
+      nameAlpha = now == null ? t.alpha : now + (t.alpha - now) * rate;
+      fade.state[key] = nameAlpha;
       if (nameAlpha < 0.01) return;
-    } else if (l.hidden) return;
+    } else {
+      if (l.hidden) return;
+      nameAlpha = l.alpha == null ? 1 : l.alpha;
+    }
     ctx.globalAlpha = (dimmed && i !== hoverIndex ? 0.45 : 1) * nameAlpha;
     if (!l.inside) {
       ctx.strokeStyle = muted;
@@ -1481,7 +1528,7 @@ function drawPie(positions, hoverIndex, insideOnly, fade) {
     }
     ctx.fillStyle = ink;
     ctx.textAlign = l.align;
-    ctx.fillText(positions[i].ticker, l.tx, l.ty + textH / 2);
+    ctx.fillText(positions[i].ticker, nameX, nameY + textH / 2);
   });
   ctx.globalAlpha = 1;
 
@@ -2061,29 +2108,43 @@ const replayEase = (p) => p * p * (3 - 2 * p); // gentle: half the peak speed of
 const replayClamp = (v) => Math.max(0, Math.min(1, v));
 
 function replayPositions(weightsAt, order) {
-  return order.map((ticker) => ({ ticker, weight: Math.max(0, weightsAt(ticker)) })).filter((p) => p.weight > 0.0005);
+  // largest first, like the real pie, at every moment (two slices swap places exactly when they are the same size,
+  // so the edges never jump)
+  return order
+    .map((ticker) => ({ ticker, weight: Math.max(0, weightsAt(ticker)) }))
+    .filter((p) => p.weight > 0.0005)
+    .sort((a, b) => b.weight - a.weight);
 }
 
-// The pie moves at a constant pace measured in how much its proportions actually change, not in trading days, so a
-// quiet stretch between trades goes by as smoothly as a busy one. This maps "how far along the journey" (0..1) to a
-// position on the trading-day curves.
+// The pie moves at a constant pace measured in what the eye follows: how fast the slice edges sweep round the pie
+// (not in trading days, and not in how much each slice's size changes, because a change in a big slice at the front
+// moves every edge behind it). This maps "how far along the journey" (0..1) to a position on the trading-day curves.
+// The lookup interpolates between its samples: snapping to the nearest one made the pie stand still for a frame or two
+// and then lurch, which looked like speeding up and slowing down.
+function replayEdges(weights) {
+  const total = weights.reduce((a, b) => a + b, 0) || 1;
+  let run = 0;
+  return weights
+    .map((w) => (w / total) * 100)
+    .sort((a, b) => b - a)
+    .map((w) => (run += w));
+}
+
 function replayPath(curves, last) {
-  const SAMPLES = 1500;
+  const SAMPLES = 3000;
   const cum = [0];
   let prev = null;
   for (let i = 0; i <= SAMPLES; i++) {
     const x = (i / SAMPLES) * last;
-    const raw = curves.map((c) => Math.max(0, c.at(x)));
-    const total = raw.reduce((a, b) => a + b, 0) || 1;
-    const frac = raw.map((w) => (w / total) * 100);
-    if (prev) cum.push(cum[cum.length - 1] + frac.reduce((acc, f, j) => acc + Math.abs(f - prev[j]), 0));
-    prev = frac;
+    const edges = replayEdges(curves.map((c) => Math.max(0, c.at(x))));
+    if (prev) cum.push(cum[cum.length - 1] + edges.reduce((acc, e, j) => acc + Math.abs(e - prev[j]), 0));
+    prev = edges;
   }
   const length = cum[cum.length - 1];
   return {
     length,
     xAt(fraction) {
-      const target = fraction * length;
+      const target = Math.max(0, Math.min(1, fraction)) * length;
       let lo = 0;
       let hi = SAMPLES;
       while (lo < hi) {
@@ -2091,7 +2152,9 @@ function replayPath(curves, last) {
         if (cum[mid] < target) lo = mid + 1;
         else hi = mid;
       }
-      return (lo / SAMPLES) * last;
+      if (lo === 0) return 0;
+      const span = cum[lo] - cum[lo - 1] || 1;
+      return ((lo - 1 + (target - cum[lo - 1]) / span) / SAMPLES) * last;
     },
   };
 }
@@ -2141,7 +2204,7 @@ function startReplay() {
     start: performance.now() + 400,
     frame: null,
     text: '',
-    fade: { state: {}, k: 1 },
+    fade: { state: {}, pos: {}, k: 1, dt: 16 },
     lastNow: null,
   };
   pieHover = null;
@@ -2206,6 +2269,8 @@ function replayLoop(now) {
   const dt = replay.lastNow == null ? 16 : Math.min(100, now - replay.lastNow);
   replay.lastNow = now;
   replay.fade.k = 1 - Math.exp(-dt / 350);
+  replay.fade.dt = dt;
+  replay.fade.kDown = 1 - Math.exp(-dt / 120);
   drawPie(replayPositions(state.weights, replay.order), null, true, replay.fade);
   const hud = replay.hud;
   if (replay.text !== state.date.text) {

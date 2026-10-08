@@ -333,9 +333,14 @@ block in `script.js`.
    smoothstep curve; a sharper curve made names jump 13px a frame).
 2. It holds on Aug 1 for 1.5s.
 3. The pie then moves at **one constant pace** through every trade up to today, about 42s, **and the date stays on
-   screen the whole way, counting forward with it** (`dateKeys`: it flies over quiet stretches and slows on busy days).
-   Pace is measured in how much the proportions actually change (`replayPath`), not in trading days, so it never stops
-   on a trading day. It only eases in and out at the two ends.
+   screen the whole way, counting forward with it** (`dateKeys`). The date deliberately flies over quiet stretches and
+   slows on busy trading days (it is the real calendar; the pie is what moves at a constant pace).
+   Pace is measured in **how fast the slice edges sweep round the pie** (`replayEdges`/`replayPath`), which is what the
+   eye follows, not in trading days and not in how much each slice's size changes (a change in a big slice at the front
+   moves every edge behind it). The lookup from "how far along" to a position on the curves **interpolates**; it used to
+   snap to a table of 1500 steps, so at 60fps the pie stood still for 2 or 3 frames and then lurched, which looked like
+   speeding up and slowing down (variation was 121%, now 1.8%, with no frame standing still). Always measure pace at
+   60fps frame by frame, never at half-second samples, which hid the bug. It only eases in and out at the two ends.
 4. At the end the date carries on to today, rests, and fades out, and the real pie comes back.
 
 **Smoothness rules (Valerio asked for these):**
@@ -347,6 +352,12 @@ block in `script.js`.
   eased over time (`fade`, about 0.35s) so a name can never flick on or off. Measured at 60fps: names move at most
   2.6px a frame and the fastest fade takes 0.43s.
 - Slices only leave the pie at a size of effectively zero (no popping at a size threshold).
+- **The pie is largest-first, clockwise from 12 o'clock, at every moment** (`replayPositions` sorts each frame), like
+  the real pie. This is smooth because two neighbouring slices swap places exactly when they are the same size, so no
+  edge ever jumps (biggest single-edge move per frame is 0.24%). Only the *names* change owner at a swap: a name that
+  jumps more than 24px is moved smoothly (an offset that decays over ~0.4s) and dims while it travels. If two names would
+  touch, the one on the smaller slice fades out (quickly, ~0.13s) until there is room, so names overlap in under 0.5%
+  of frames and never above 50% visibility.
 - `drawPie` only resizes the canvas when its size really changes (it used to reallocate it every frame, a source of
   flicker and dropped frames). A frame costs about 0.5ms.
 
