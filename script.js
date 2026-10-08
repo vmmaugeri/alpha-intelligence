@@ -1,16 +1,17 @@
 // --- Stars (easter egg) ---
 // In dark mode while the market is closed, a faint field of stars across the top of the page: thickest at the
 // left and right edges, thinning out toward the middle where the title and chart are, twinkling very gently.
-// When the market opens they drift up and fade away one by one. Switching to light mode fades them quickly.
-const STAR_HEIGHT = 440;
-let stars = [];
-let starsWidth = 0;
-let starsState = 'off'; // 'off' | 'in' | 'on' | 'out'
-let starsStart = 0;
-let starsFast = false;
-let starsInk = '#EEE7D6';
-let starsFrame = null;
-let starsLast = 0;
+// They arrive by coming down from above the top edge, one after another, and at market open each one climbs
+// back up and out through the top of the page. Switching to light mode just fades them quickly.
+const SKY_HEIGHT = 440;
+let skyItems = [];
+let skyWidth = -1;
+let skyState = 'off'; // 'off' | 'in' | 'on' | 'out'
+let skyStart = 0;
+let skyFast = false;
+let skyInk = '#EEE7D6';
+let skyFrame = null;
+let skyLast = 0;
 
 // The occasional shooting star: the first one SHOOT_FIRST_MS after the stars appear, then one every
 // SHOOT_EVERY_MS for as long as they are up. A quick, faint streak, never while the stars are leaving.
@@ -30,7 +31,7 @@ function seededRandom(seed) {
   };
 }
 
-// The same sky every time (fixed seed), laid out for the current width.
+// The same stars every time (fixed seed), laid out for the current width.
 function buildStars(width) {
   const rand = seededRandom(20261008);
   const count = Math.round(Math.min(240, Math.max(60, width / 5)));
@@ -39,23 +40,24 @@ function buildStars(width) {
     const x = rand();
     const edge = Math.abs(x * 2 - 1); // 0 in the middle, 1 at either edge
     if (rand() > 0.06 + 0.94 * Math.pow(edge, 1.7)) continue;
+    const y = Math.pow(rand(), 1.5) * SKY_HEIGHT;
     list.push({
       x: x * width,
-      y: Math.pow(rand(), 1.5) * STAR_HEIGHT,
+      y,
       r: 0.5 + rand() * 0.9,
       a: 0.2 + rand() * 0.4,
       phase: rand() * 6.28,
       speed: 0.4 + rand() * 0.9,
       inDelay: rand() * 1400,
       outDelay: rand() * 1500,
-      rise: 25 + rand() * 60,
+      fly: y + 30 + rand() * 70, // how far above its spot it starts, and how far up it goes to leave the page
     });
   }
   return list;
 }
 
 function drawShootingStar(ctx, now, width) {
-  if (!shoot && starsState === 'on' && now >= nextShootAt) {
+  if (!shoot && skyState === 'on' && now >= nextShootAt) {
     // Alternate sides, start in the outer thirds so the title and chart stay clear, fall at a shallow angle.
     const fromLeft = shootSide++ % 2 === 0;
     const angle = ((18 + Math.random() * 20) * Math.PI) / 180;
@@ -73,7 +75,7 @@ function drawShootingStar(ctx, now, width) {
   }
   if (!shoot) return;
   const p = (now - shoot.start) / shoot.dur;
-  if (p >= 1 || starsState === 'off' || starsState === 'out') {
+  if (p >= 1 || skyState === 'off' || skyState === 'out') {
     shoot = null;
     nextShootAt = now + SHOOT_EVERY_MS;
     return;
@@ -85,7 +87,7 @@ function drawShootingStar(ctx, now, width) {
   const env = Math.min(1, p / 0.1) * Math.min(1, (1 - p) / 0.6);
   const g = ctx.createLinearGradient(hx - shoot.vx * tail, hy - shoot.vy * tail, hx, hy);
   g.addColorStop(0, 'rgba(0,0,0,0)');
-  g.addColorStop(1, starsInk);
+  g.addColorStop(1, skyInk);
   ctx.globalAlpha = 0.6 * env;
   ctx.strokeStyle = g;
   ctx.lineWidth = 1.1;
@@ -94,15 +96,36 @@ function drawShootingStar(ctx, now, width) {
   ctx.moveTo(hx - shoot.vx * tail, hy - shoot.vy * tail);
   ctx.lineTo(hx, hy);
   ctx.stroke();
-  ctx.fillStyle = starsInk;
+  ctx.fillStyle = skyInk;
   ctx.beginPath();
   ctx.arc(hx, hy, 1.1, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = 1;
 }
 
-function drawStars(now) {
-  const canvas = document.getElementById('stars');
+// How far along one star is. Coming in, it slides down from above the page and settles. Going out, it speeds up
+// and leaves through the top of the page, and only fades in its last moments. A quick fade is used instead when
+// switching to light mode, and with reduced motion.
+const skyClamp = (v) => Math.max(0, Math.min(1, v));
+
+function skyPose(s, t, reduce) {
+  if (skyState === 'in') {
+    const p = reduce ? 1 : skyClamp((t - s.inDelay) / 2000);
+    return { p, k: reduce ? 1 : skyClamp(p * 5), dy: -s.fly * Math.pow(1 - p, 3) };
+  }
+  if (skyState === 'out') {
+    if (skyFast || reduce) {
+      const p = skyClamp(t / 350);
+      return { p, k: 1 - p, dy: 0 };
+    }
+    const p = skyClamp((t - s.outDelay) / 1900);
+    return { p, k: 1 - skyClamp((p - 0.82) / 0.18), dy: -s.fly * p * p };
+  }
+  return { p: 1, k: 1, dy: 0 };
+}
+
+function drawSky(now) {
+  const canvas = document.getElementById('sky');
   if (!canvas) return;
   const dpr = window.devicePixelRatio || 1;
   const width = canvas.clientWidth;
@@ -111,36 +134,25 @@ function drawStars(now) {
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(height * dpr);
   }
-  if (width !== starsWidth) {
-    starsWidth = width;
-    stars = buildStars(width);
+  if (width !== skyWidth) {
+    skyWidth = width;
+    skyItems = buildStars(width);
   }
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
 
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const t = now - starsStart;
-  const clamp = (v) => Math.max(0, Math.min(1, v));
-  const outLength = starsFast || reduce ? 350 : 1700;
+  const t = now - skyStart;
   let finished = true;
 
-  ctx.fillStyle = starsInk;
-  stars.forEach((s) => {
-    let k = 1;
-    let dy = 0;
-    if (starsState === 'in') {
-      k = reduce ? 1 : clamp((t - s.inDelay) / 1200);
-      if (k < 1) finished = false;
-    } else if (starsState === 'out') {
-      const p = clamp((t - (starsFast || reduce ? 0 : s.outDelay)) / outLength);
-      k = 1 - p;
-      dy = reduce ? 0 : -s.rise * (1 - Math.pow(1 - p, 2));
-      if (p < 1) finished = false;
-    }
+  ctx.fillStyle = skyInk;
+  skyItems.forEach((s) => {
+    const { p, k, dy } = skyPose(s, t, reduce);
+    if (p < 1) finished = false;
     if (k <= 0) return;
     const twinkle = reduce ? 1 : 0.8 + 0.2 * Math.sin((now / 1000) * s.speed * 2 + s.phase);
-    ctx.globalAlpha = s.a * twinkle * k * (1 - 0.85 * (s.y / STAR_HEIGHT));
+    ctx.globalAlpha = s.a * twinkle * k * (1 - 0.85 * (s.y / SKY_HEIGHT));
     ctx.beginPath();
     ctx.arc(s.x, s.y + dy, s.r, 0, Math.PI * 2);
     ctx.fill();
@@ -149,41 +161,41 @@ function drawStars(now) {
 
   if (!reduce) drawShootingStar(ctx, now, width);
 
-  if (starsState === 'in' && finished) starsState = 'on';
-  if (starsState === 'out' && finished) {
-    starsState = 'off';
+  if (skyState === 'in' && finished) skyState = 'on';
+  if (skyState === 'out' && finished) {
+    skyState = 'off';
     ctx.clearRect(0, 0, width, height);
   }
 }
 
-function starsLoop(now) {
-  starsFrame = null;
-  if (starsState === 'off') return;
-  if (now - starsLast >= 33) {
-    starsLast = now;
-    drawStars(now);
+function skyLoop(now) {
+  skyFrame = null;
+  if (skyState === 'off') return;
+  if (now - skyLast >= 33) {
+    skyLast = now;
+    drawSky(now);
   }
-  if (starsState !== 'off') starsFrame = requestAnimationFrame(starsLoop);
+  if (skyState !== 'off') skyFrame = requestAnimationFrame(skyLoop);
 }
 
-function setStars(state, fast) {
-  starsState = state;
-  starsFast = !!fast;
-  starsStart = performance.now();
-  starsInk = themeColors().ink;
+function setSky(state, fast) {
+  skyState = state;
+  skyFast = !!fast;
+  skyStart = performance.now();
+  skyInk = themeColors().ink;
   if (state === 'in') {
     shoot = null;
-    nextShootAt = starsStart + SHOOT_FIRST_MS;
+    nextShootAt = skyStart + SHOOT_FIRST_MS;
   }
-  if (starsFrame === null) starsFrame = requestAnimationFrame(starsLoop);
+  if (skyFrame === null) skyFrame = requestAnimationFrame(skyLoop);
 }
 
 // Called on every refresh, and when the theme changes.
-function updateStars(fast) {
-  if (!document.getElementById('stars')) return;
+function updateSky(fast) {
+  if (!document.getElementById('sky')) return;
   const want = document.documentElement.getAttribute('data-theme') === 'dark' && !isMarketOpen();
-  if (want && (starsState === 'off' || starsState === 'out')) setStars('in');
-  else if (!want && (starsState === 'on' || starsState === 'in')) setStars('out', fast);
+  if (want && (skyState === 'off' || skyState === 'out')) setSky('in');
+  else if (!want && (skyState === 'on' || skyState === 'in')) setSky('out', fast);
 }
 
 // --- Theme ---
@@ -253,7 +265,7 @@ function applyTheme(theme, save) {
   clearTimeout(themeRedrawTimer);
   if (animate) themeRedrawTimer = setTimeout(redraw, 170);
   else redraw();
-  updateStars(true);
+  updateSky(true);
 }
 
 function attachThemeToggle() {
@@ -1878,7 +1890,7 @@ async function init() {
 async function tick() {
   await init();
   updateMarketStatus();
-  updateStars(false);
+  updateSky(false);
 }
 
 // --- Load-in ---

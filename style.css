@@ -61,7 +61,7 @@ body {
 }
 
 /* Easter egg: stars across the top of the page in dark mode while the market is closed (script.js). */
-#stars {
+#sky {
   position: absolute;
   top: 0;
   left: 0;

@@ -161,11 +161,14 @@ touching any of it:
 ## Stars (easter egg)
 
 - In **dark mode while the market is closed**, a faint field of stars sits across the top of the page
-  (`#stars`, a 440px-tall canvas behind the content; code is the "Stars" block at the top of `script.js`).
+  (`#sky`, a 440px-tall canvas behind the content; code is the "Stars" block at the top of `script.js`).
   They are thickest at the left and right edges and thin toward the middle where the title and chart are, and
-  they twinkle very gently. When the market opens (checked on the 20 second refresh, with the same
-  `isMarketOpen()` as the status text, so no holiday calendar) they drift up and fade one by one over ~3s.
-  Switching to light mode fades them quickly, and `prefers-reduced-motion` shows them still.
+  they twinkle very gently.
+- **Arrival and exit:** the stars arrive by coming **down from above the top edge**, one after another (~3.4s in
+  all). When the market opens (checked on the 20 second refresh, with the same `isMarketOpen()` as the status
+  text, so no holiday calendar) each star **speeds up and leaves through the top of the page** and only fades in
+  its last moments (~3.4s in all). Switching to light mode fades them quickly instead, and
+  `prefers-reduced-motion` shows them still.
 - **Shooting star:** while the stars are up, one faint streak with a long tail crosses the top (about 1.9 seconds, alternating
   from the left and right thirds, never over the middle). The first comes **30 seconds after the stars appear**,
   then **one every 90 seconds** (`SHOOT_FIRST_MS`, `SHOOT_EVERY_MS` in `script.js`). The timer restarts if the
@@ -297,3 +300,9 @@ touching any of it:
   history, work in Manual permission mode by default — this is real
   (paper-traded but publicly reported) financial data, not a throwaway
   project.
+
+## Tried and dropped
+
+- Weather: faint clouds and a soft sun in light mode while the market is open, from London's weather (Open-Meteo,
+  free, no key), arriving from the top and leaving upward like the stars. Mocked up and rejected by Valerio on
+  2026-10-08 ("don't like the sun and clouds"). Don't re-propose it.
