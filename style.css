@@ -1153,28 +1153,28 @@ li.note-left > .note::before {
   border-left: 6px solid var(--note-line);
 }
 
-/* Bubbles pop out of their row one at a time, each on its own delay and duration, once scrolled into view (script.js popNote).
-   Only scale and opacity animate, so the side bubbles' own transform is left alone. */
-@keyframes notePop {
-  from { opacity: 0; scale: 0.88; }
-  to { opacity: 1; scale: 1; }
+/* Bubbles arrive one at a time, each on its own delay and duration, once scrolled into view (script.js popNote). */
+@keyframes noteIn {
+  from { opacity: 0; translate: var(--note-from, 0 8px); }
+  to { opacity: 1; translate: 0 0; }
 }
 
 .note.note-wait {
   opacity: 0;
 }
 
+/* A calm fade and a short drift into place, with no bounce. Only opacity and translate move, so the side
+   bubbles keep their own transform. */
 .note.note-pop {
-  transform-origin: 16px 0;
-  animation: notePop var(--pop-dur, 0.6s) cubic-bezier(0.2, 0.9, 0.3, 1.15) var(--pop-delay, 0s) backwards;
+  animation: noteIn var(--pop-dur, 1s) cubic-bezier(0.22, 0.61, 0.36, 1) var(--pop-delay, 0s) backwards;
 }
 
 li.note-right > .note.note-pop {
-  transform-origin: 0 50%;
+  --note-from: -10px 0;
 }
 
 li.note-left > .note.note-pop {
-  transform-origin: 100% 50%;
+  --note-from: 10px 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

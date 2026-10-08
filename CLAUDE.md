@@ -123,7 +123,8 @@ touching any of it:
   `NOTE_DAYS` (14) after its date and then disappears by itself, but stays in the ticker's history for good.
   **Closed positions:** put a `note` on the entry in `CLOSED_POSITIONS`; it shows for as long as the entry is
   one of the 3 most recent.
-- **Pop-out:** each bubble pops (its own delay and duration) only once it has been scrolled properly into view: it must
+- **Pop-out:** each bubble arrives (a calm fade with a short drift into place, about 1s, no bounce or scaling, its own
+  delay and duration) only once it has been scrolled properly into view: it must
   be fully visible and above the bottom 14% of the screen (`IntersectionObserver` in `script.js`). Bubbles below the fold
   stay invisible until you reach them, and the ones already in view when the page finishes loading pop one after
   another. A bubble pops once: the 20 second refresh rebuilds the rows, and bubbles that have already popped (remembered
@@ -324,23 +325,34 @@ All in the "Hidden keyboard shortcuts" block of `script.js`.
 
 ## Replay (press r)
 
-The pie goes back in time and plays the portfolio forward to today, in four beats (all timings are constants at the top
-of the replay block in `script.js`):
+The pie goes back in time and plays the portfolio forward to today. All timings are constants at the top of the replay
+block in `script.js`.
 
-1. A date in the top left of the pie ticks back fast from today to Aug 1, slowing to land on it (it is motion-blurred
-   while fast and sharpens as it lands) while the pie slips back to its first positions. About 2.8s.
-2. It holds on Aug 1 for 1.5s, then the date fades out just as the pie sets off.
-3. The pie then moves at **one constant pace** through every trade up to today, about 42s. Pace is measured in how much
-   the proportions actually change (`replayPath`), not in trading days, so quiet stretches and busy ones go by
-   equally smoothly and it never stops on a trading day (measured: pace varies about 5%). It only eases in and out at the
-   two ends.
-4. At the end today's date fades in, rests, and fades out (3s), and the real pie comes back.
+1. A date in the top left of the pie ticks back fast from today to Aug 1, slowing to land on it (motion-blurred while
+   fast, sharpening as it lands) while the pie slowly slips back to its first positions (about 4.2s, on a gentle
+   smoothstep curve; a sharper curve made names jump 13px a frame).
+2. It holds on Aug 1 for 1.5s.
+3. The pie then moves at **one constant pace** through every trade up to today, about 42s, **and the date stays on
+   screen the whole way, counting forward with it** (`dateKeys`: it flies over quiet stretches and slows on busy days).
+   Pace is measured in how much the proportions actually change (`replayPath`), not in trading days, so it never stops
+   on a trading day. It only eases in and out at the two ends.
+4. At the end the date carries on to today, rests, and fades out, and the real pie comes back.
 
-**The pie keeps its exact size and position throughout** (only the proportions change): the replay draws with
-`insideOnly`, so a slice too small for a label simply goes unlabelled instead of getting a leader line, which is what
-used to shrink the pie. Same geometry as the real pie. Built from `TRADE_FILLS` with the same entry-cost weights the pie
-uses, and every slice follows a smooth monotone curve through its size on each trading day (`replayCurve`). The last
-frame is today's real pie. Esc, or `r` again, stops it. CBOE:RAM and OMXSTO:SIVE are not in `TRADE_FILLS` on purpose.
+**Smoothness rules (Valerio asked for these):**
+- The pie keeps its exact size and position throughout, only the proportions change: the replay draws with `insideOnly`,
+  so there are no leader lines (which used to shrink the pie).
+- **Ticker names never move relative to their slice**: each sits at one fixed spot in the middle of its slice (0.66 of
+  the radius, the same spot the real pie uses) and is invisible until the slice has nearly enough room, then fades in
+  and is fully visible exactly when the name fits (`room`), and fades out as the slice shrinks. Visibility is also
+  eased over time (`fade`, about 0.35s) so a name can never flick on or off. Measured at 60fps: names move at most
+  2.6px a frame and the fastest fade takes 0.43s.
+- Slices only leave the pie at a size of effectively zero (no popping at a size threshold).
+- `drawPie` only resizes the canvas when its size really changes (it used to reallocate it every frame, a source of
+  flicker and dropped frames). A frame costs about 0.5ms.
+
+Built from `TRADE_FILLS` with the same entry-cost weights the pie uses, and every slice follows a smooth monotone curve
+through its size on each trading day (`replayCurve`). The last frame is today's real pie. Esc, or `r` again, stops it.
+CBOE:RAM and OMXSTO:SIVE are not in `TRADE_FILLS` on purpose.
 
 ## Daily returns calendar
 

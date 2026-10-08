@@ -1034,8 +1034,8 @@ function buildNote(text, dateLabel, key) {
 // screen: they have to be scrolled up from the bottom edge first, so ones below the fold stay hidden until
 // you get to them. Bubbles already in view when the page finishes loading pop one after another once the
 // load-in is done.
-const POP_JITTER_MS = [0, 240, 90, 420, 150];
-const POP_DURATIONS_S = [0.7, 0.52, 0.85, 0.6];
+const POP_JITTER_MS = [0, 260, 110, 420, 180];
+const POP_DURATIONS_S = [1.1, 0.95, 1.3, 1.05];
 const poppedNotes = new Set();
 let notesEnabled = false;
 let notesReadyAt = 0;
@@ -1059,7 +1059,7 @@ function popNote(el) {
   if (el.dataset.noteKey) poppedNotes.add(el.dataset.noteKey);
   const i = notePopCount++;
   const lead = Math.max(0, notesReadyAt - performance.now()); // wait for the load-in to finish first
-  const delay = lead + (lead > 0 ? (i % 4) * 330 : 0) + POP_JITTER_MS[i % POP_JITTER_MS.length];
+  const delay = lead + (lead > 0 ? (i % 4) * 420 : 0) + POP_JITTER_MS[i % POP_JITTER_MS.length];
   el.style.setProperty('--pop-delay', `${Math.round(delay)}ms`);
   el.style.setProperty('--pop-dur', `${POP_DURATIONS_S[i % POP_DURATIONS_S.length]}s`);
   el.classList.remove('note-wait');
@@ -1274,13 +1274,29 @@ function layoutPie(positions, width, height, ctx, insideOnly) {
       const uy = Math.sin(s.mid);
       const hw = textW[i] / 2 + 4;
       const hh = textH / 2 + 4;
+      if (insideOnly) {
+        // The replay: the ticker sits at one fixed spot in the middle of its slice, so it never hops about. It is
+        // invisible until the slice has nearly enough room, fades in as the slice grows until the name fits, and fades
+        // out as it shrinks. (The room is how big the label's box could be and still fit in the slice.)
+        const x = ux * 0.66 * R;
+        const y = uy * 0.66 * R * k;
+        if (!fits(s, x, y, hw * 0.5, hh * 0.5)) return { inside: true, hidden: true, align: 'center', tx: x, ty: y };
+        let lo = 0.5;
+        let hi = 2.4;
+        for (let n = 0; n < 8; n++) {
+          const mid = (lo + hi) / 2;
+          if (fits(s, x, y, hw * mid, hh * mid)) lo = mid;
+          else hi = mid;
+        }
+        // fully visible exactly when the name fits (that is what the real pie shows), fading in over the last ~18%
+        const room = Math.max(0, Math.min(1, (lo - 0.82) / 0.18));
+        return { inside: true, hidden: room <= 0.01, alpha: room * room * (3 - 2 * room), align: 'center', tx: x, ty: y };
+      }
       for (const f of [0.66, 0.74, 0.58, 0.82, 0.5]) {
         const x = ux * f * R;
         const y = uy * f * R * k;
         if (fits(s, x, y, hw, hh)) return { inside: true, align: 'center', tx: x, ty: y };
       }
-      // In inside-only mode (the replay) a slice that is too small simply goes unlabelled, so the pie keeps its size.
-      if (insideOnly) return { inside: true, hidden: true, align: 'center', tx: 0, ty: 0 };
       // Too small: a dot inside the slice, a line out past the rim, then the ticker.
       const ex = ux * 1.1 * R;
       const ey = uy * 1.1 * R * k + (uy > 0 ? PIE_DEPTH : 0);
@@ -1370,14 +1386,17 @@ function layoutPie(positions, width, height, ctx, insideOnly) {
   return { cx: dx, cy: dy, R, k, font, textH, slices, labels: placed.labels };
 }
 
-function drawPie(positions, hoverIndex, insideOnly) {
+function drawPie(positions, hoverIndex, insideOnly, fade) {
   const canvas = document.getElementById('pie');
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
-  canvas.width = width * dpr;
-  canvas.height = height * dpr;
+  // Resizing the canvas throws its pixels away and reallocates them, so only do it when the size really changed.
+  if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+  }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, width, height);
@@ -1438,8 +1457,15 @@ function drawPie(positions, hoverIndex, insideOnly) {
   ctx.font = font;
   ctx.textBaseline = 'alphabetic';
   labels.forEach((l, i) => {
-    if (l.hidden) return;
-    ctx.globalAlpha = dimmed && i !== hoverIndex ? 0.45 : 1;
+    let nameAlpha = l.hidden ? 0 : l.alpha == null ? 1 : l.alpha;
+    if (fade) {
+      // the replay: a name eases toward being shown or hidden, so it can never flick on or off
+      const now = fade.state[positions[i].ticker];
+      nameAlpha = (now == null ? nameAlpha : now) + (nameAlpha - (now == null ? nameAlpha : now)) * fade.k;
+      fade.state[positions[i].ticker] = nameAlpha;
+      if (nameAlpha < 0.01) return;
+    } else if (l.hidden) return;
+    ctx.globalAlpha = (dimmed && i !== hoverIndex ? 0.45 : 1) * nameAlpha;
     if (!l.inside) {
       ctx.strokeStyle = muted;
       ctx.lineWidth = 1;
@@ -1957,12 +1983,12 @@ function renderHeatmap() {
 // Press r and the pie goes back in time and plays the portfolio forward to today.
 //  1. A date at the top left ticks back from today to Aug 1, fast and slowing to land on it, while the pie slips
 //     back to its first positions.
-//  2. It holds on Aug 1 for a moment, then the date fades out as the pie starts to move.
+//  2. It holds on Aug 1 for a moment, then the pie sets off and the date counts forward alongside it.
 //  3. The pie then moves at one constant pace through every trade up to today: always the same size, only its
 //     proportions change, never a pause on a trading day.
-//  4. At the end today's date fades in and out once.
+//  4. At the end the date carries on to today, rests for a moment, and fades out.
 // Built from TRADE_FILLS with the same entry-cost weights the pie normally shows, so the last frame is the real pie.
-const REPLAY_BACK_MS = 2800; // the date ticking back, and the pie slipping back to its first positions
+const REPLAY_BACK_MS = 4200; // the date ticking back, and the pie slowly slipping back to its first positions
 const REPLAY_HOLD_MS = 1500; // holding on Aug 1
 const REPLAY_PLAY_MS = 42000; // the slow, constant journey forward
 const REPLAY_END_MS = 3000; // today's date fading in and out
@@ -2031,11 +2057,11 @@ function replayPace(u, a) {
   return v * (u - a / 2);
 }
 
-const replayEase = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+const replayEase = (p) => p * p * (3 - 2 * p); // gentle: half the peak speed of a cubic ease
 const replayClamp = (v) => Math.max(0, Math.min(1, v));
 
 function replayPositions(weightsAt, order) {
-  return order.map((ticker) => ({ ticker, weight: Math.max(0, weightsAt(ticker)) })).filter((p) => p.weight > 0.35);
+  return order.map((ticker) => ({ ticker, weight: Math.max(0, weightsAt(ticker)) })).filter((p) => p.weight > 0.0005);
 }
 
 // The pie moves at a constant pace measured in how much its proportions actually change, not in trading days, so a
@@ -2083,6 +2109,14 @@ function startReplay() {
   const last = steps.length - 1;
   const today = steps[last].weights;
   const first = steps[0].weights;
+  const utcMs = (str) => new Date(`${str}T12:00:00Z`).getTime();
+  // Where each trading day sits on the journey, so the date can count forward with the pie. The first stretch
+  // carries the date from Aug 1 on to the first trades on Aug 3.
+  const dateKeys = [
+    { x: 0, ms: utcMs(REPLAY_START_DATE) },
+    { x: 0.12, ms: utcMs(steps[0].date) },
+    ...steps.slice(1).map((st, i) => ({ x: i + 1, ms: utcMs(st.date) })),
+  ];
 
   const hud = document.createElement('div');
   hud.className = 'replay-date';
@@ -2102,9 +2136,13 @@ function startReplay() {
     path: replayPath(curves, last),
     todayMs: utc(etDateFormat.format(new Date())),
     startMs: utc(REPLAY_START_DATE),
+    dateKeys,
+    lastMs: utcMs(steps[last].date),
     start: performance.now() + 400,
     frame: null,
     text: '',
+    fade: { state: {}, k: 1 },
+    lastNow: null,
   };
   pieHover = null;
   const tooltip = document.getElementById('pieTooltip');
@@ -2134,16 +2172,25 @@ function replayState(t) {
     weights = (ticker) => R.first[ticker] || 0;
     date = { text: replayDayLabel(R.startMs), opacity: 1, blur: 0 };
   } else if (t < REPLAY_BACK_MS + REPLAY_HOLD_MS + REPLAY_PLAY_MS) {
-    // the journey forward: one constant pace, and the date fades out as it sets off
+    // the journey forward: one constant pace, with the date counting forward alongside it
     const u = (t - REPLAY_BACK_MS - REPLAY_HOLD_MS) / REPLAY_PLAY_MS;
     const x = R.path.xAt(replayPace(u, 0.025));
     weights = (ticker) => R.curves.find((c) => c.ticker === ticker).at(x);
-    date = { text: replayDayLabel(R.startMs), opacity: 1 - replayClamp((u * REPLAY_PLAY_MS) / 1100), blur: 0 };
+    const keys = R.dateKeys;
+    let k = 0;
+    while (k < keys.length - 2 && x > keys[k + 1].x) k++;
+    const span = keys[k + 1].x - keys[k].x || 1;
+    const ms = keys[k].ms + (keys[k + 1].ms - keys[k].ms) * replayClamp((x - keys[k].x) / span);
+    date = { text: replayDayLabel(ms), opacity: 1, blur: 0 };
   } else {
-    // arrived: today's date fades in, rests for a moment, and fades out
+    // arrived: the date carries on to today, rests for a moment, and fades out
     const e = (t - REPLAY_BACK_MS - REPLAY_HOLD_MS - REPLAY_PLAY_MS) / REPLAY_END_MS;
     weights = (ticker) => R.today[ticker] || 0;
-    date = { text: replayDayLabel(R.todayMs), opacity: Math.min(replayClamp(e / 0.3), replayClamp((1 - e) / 0.3)), blur: 0 };
+    date = {
+      text: replayDayLabel(R.lastMs + (R.todayMs - R.lastMs) * replayClamp(e / 0.25)),
+      opacity: replayClamp((1 - e) / 0.3),
+      blur: 0,
+    };
   }
   return { weights, date, done: t >= total };
 }
@@ -2156,7 +2203,10 @@ function replayLoop(now) {
     stopReplay();
     return;
   }
-  drawPie(replayPositions(state.weights, replay.order), null, true);
+  const dt = replay.lastNow == null ? 16 : Math.min(100, now - replay.lastNow);
+  replay.lastNow = now;
+  replay.fade.k = 1 - Math.exp(-dt / 350);
+  drawPie(replayPositions(state.weights, replay.order), null, true, replay.fade);
   const hud = replay.hud;
   if (replay.text !== state.date.text) {
     replay.text = state.date.text;
