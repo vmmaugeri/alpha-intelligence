@@ -227,6 +227,12 @@ touching any of it:
   Now `init()` keeps the last good numbers once anything has loaded (`hasLoaded`) and shows the error only if
   the very first load fails. The benchmarks section likewise keeps its last rows if only the ETF quotes fail.
   Keep any new refresh-driven element the same: never hide, replace or resize content above the reader on an error.
+- **Scroll anchoring is switched off** (`html { overflow-anchor: none }` in `style.css`). Browsers otherwise
+  nudge the scroll position when anything above the reader changes height, and this page refreshes itself every
+  20 seconds. Don't remove it. Tested: with anchoring on, a 38px change above moved scroll 900 to 938; off, it stays 900.
+- **Finnhub 429s come in bursts** and make `/api/quotes` return a 500 (`Finnhub request failed for X: 429`).
+  Heavy testing against the live API, or several open tabs, can trigger it. In a quiet period it answers normally.
+  An open tab keeps running the old JS until it is reloaded, so after a deploy hard refresh before judging a fix.
 - **`isMarketOpenNow()` gates ALL history logging** to real NYSE hours
   (9:30am–4pm ET, weekdays). This is deliberate — it prevents flat, stale
   overnight/weekend data from polluting the chart. Don't remove it.
