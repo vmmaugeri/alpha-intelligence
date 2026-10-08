@@ -110,10 +110,10 @@ function drawShootingStar(ctx, now, width) {
   drawMeteor(ctx, shoot, now);
 }
 
-// The Konami code (up up down down left right left right b a) sets off a meteor shower: about ten seconds of
+// The Konami code, with an A I at the end for Alpha Intelligence (up up down down left right left right a i), sets off a meteor shower: about ten seconds of
 // shooting stars, dark mode only. If the stars are not already up (the market is open) they come down for it
 // and leave again afterwards.
-const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
+const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'a', 'i'];
 const SHOWER_METEORS = 8;
 let konamiAt = 0;
 let showerMeteors = [];
@@ -1010,11 +1010,9 @@ function activeNote(ticker) {
 
 // A note on an open position leads with the date the change was made. A closed position already shows its
 // date in the row, so its note doesn't need one.
-function buildNote(text, dateLabel) {
+function buildNote(text, dateLabel, key) {
   const el = document.createElement('div');
-  // Held back until popNotes() lets it out, unless the first pop-out has already happened (a refresh
-  // rebuilds the rows, and those bubbles should just be there).
-  el.className = notesPopped ? 'note' : 'note note-wait';
+  el.className = 'note';
   if (dateLabel) {
     const date = document.createElement('span');
     date.className = 'note-date';
@@ -1022,24 +1020,65 @@ function buildNote(text, dateLabel) {
     el.appendChild(date);
   }
   el.appendChild(document.createTextNode(text));
+  // A bubble with a key waits, invisible, until it has been scrolled into view, then pops. A refresh rebuilds
+  // the rows, so a bubble that has already popped (its key is remembered) is just shown.
+  if (key && !poppedNotes.has(key)) {
+    el.classList.add('note-wait');
+    el.dataset.noteKey = key;
+    if (noteObserver && notesEnabled) noteObserver.observe(el);
+  }
   return el;
 }
 
-// The bubbles pop out one by one after the page has loaded in, each on its own delay and speed so it never
-// looks like a block. Runs once for the notes waiting; later rebuilds skip it.
-let notesPopped = false;
+// The bubbles pop out one at a time, each with its own delay and speed, and only once they are properly on
+// screen: they have to be scrolled up from the bottom edge first, so ones below the fold stay hidden until
+// you get to them. Bubbles already in view when the page finishes loading pop one after another once the
+// load-in is done.
 const POP_JITTER_MS = [0, 240, 90, 420, 150];
 const POP_DURATIONS_S = [0.7, 0.52, 0.85, 0.6];
+const poppedNotes = new Set();
+let notesEnabled = false;
+let notesReadyAt = 0;
+let notePopCount = 0;
+const noteObserver =
+  'IntersectionObserver' in window
+    ? new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting && notesEnabled && entry.target.classList.contains('note-wait')) {
+              noteObserver.unobserve(entry.target);
+              popNote(entry.target);
+            }
+          });
+        },
+        { threshold: 0.9, rootMargin: '0px 0px -14% 0px' }
+      )
+    : null;
 
+function popNote(el) {
+  if (el.dataset.noteKey) poppedNotes.add(el.dataset.noteKey);
+  const i = notePopCount++;
+  const lead = Math.max(0, notesReadyAt - performance.now()); // wait for the load-in to finish first
+  const delay = lead + (lead > 0 ? (i % 4) * 330 : 0) + POP_JITTER_MS[i % POP_JITTER_MS.length];
+  el.style.setProperty('--pop-delay', `${Math.round(delay)}ms`);
+  el.style.setProperty('--pop-dur', `${POP_DURATIONS_S[i % POP_DURATIONS_S.length]}s`);
+  el.classList.remove('note-wait');
+  el.classList.add('note-pop');
+}
+
+// Called once the page has loaded in: from now on a bubble may pop as soon as it is in view.
 function popNotes(startMs) {
+  if (!notesEnabled) {
+    notesEnabled = true;
+    notesReadyAt = performance.now() + startMs;
+  }
   const waiting = [...document.querySelectorAll('.note.note-wait')];
-  waiting.forEach((el, i) => {
-    el.style.setProperty('--pop-delay', `${Math.round(startMs + i * 330 + POP_JITTER_MS[i % POP_JITTER_MS.length])}ms`);
-    el.style.setProperty('--pop-dur', `${POP_DURATIONS_S[i % POP_DURATIONS_S.length]}s`);
-    el.classList.remove('note-wait');
-    el.classList.add('note-pop');
-  });
-  if (waiting.length > 0) notesPopped = true;
+  if (!noteObserver) {
+    waiting.forEach(popNote);
+    return;
+  }
+  noteObserver.disconnect(); // watching again makes it report what is in view right now
+  waiting.forEach((el) => noteObserver.observe(el));
 }
 
 // On a wide screen (1100px and up) a note comes out beside its row, in the empty margin, alternating
@@ -1122,7 +1161,7 @@ function renderClosedPositions() {
     li.appendChild(change);
     if (pos.note) {
       li.classList.add('has-note');
-      li.appendChild(buildNote(pos.note));
+      li.appendChild(buildNote(pos.note, undefined, `closed:${pos.ticker}:${pos.date}`));
     }
     list.appendChild(li);
   });
@@ -1197,7 +1236,7 @@ let pieHover = null;
 let pieSelected = null; // ticker whose history panel is open
 let pieSignature = null;
 
-function layoutPie(positions, width, height, ctx) {
+function layoutPie(positions, width, height, ctx, insideOnly) {
   const total = positions.reduce((sum, p) => sum + p.weight, 0);
   if (!(total > 0)) return null;
 
@@ -1240,6 +1279,8 @@ function layoutPie(positions, width, height, ctx) {
         const y = uy * f * R * k;
         if (fits(s, x, y, hw, hh)) return { inside: true, align: 'center', tx: x, ty: y };
       }
+      // In inside-only mode (the replay) a slice that is too small simply goes unlabelled, so the pie keeps its size.
+      if (insideOnly) return { inside: true, hidden: true, align: 'center', tx: 0, ty: 0 };
       // Too small: a dot inside the slice, a line out past the rim, then the ticker.
       const ex = ux * 1.1 * R;
       const ey = uy * 1.1 * R * k + (uy > 0 ? PIE_DEPTH : 0);
@@ -1329,7 +1370,7 @@ function layoutPie(positions, width, height, ctx) {
   return { cx: dx, cy: dy, R, k, font, textH, slices, labels: placed.labels };
 }
 
-function drawPie(positions, hoverIndex) {
+function drawPie(positions, hoverIndex, insideOnly) {
   const canvas = document.getElementById('pie');
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
@@ -1342,7 +1383,7 @@ function drawPie(positions, hoverIndex) {
   ctx.clearRect(0, 0, width, height);
   if (width < 120 || height < 80) return;
 
-  const layout = layoutPie(positions, width, height, ctx);
+  const layout = layoutPie(positions, width, height, ctx, insideOnly);
   if (!layout) return;
   const { cx, cy, R, k, font, textH, slices, labels } = layout;
   const rimX = (a) => cx + Math.cos(a) * R;
@@ -1397,6 +1438,7 @@ function drawPie(positions, hoverIndex) {
   ctx.font = font;
   ctx.textBaseline = 'alphabetic';
   labels.forEach((l, i) => {
+    if (l.hidden) return;
     ctx.globalAlpha = dimmed && i !== hoverIndex ? 0.45 : 1;
     if (!l.inside) {
       ctx.strokeStyle = muted;
@@ -1697,7 +1739,6 @@ function openHistory(ticker) {
     }
     if (ev.comment) {
       const bubble = buildNote(ev.comment);
-      bubble.classList.remove('note-wait');
       bubble.classList.add('history-note');
       li.appendChild(bubble);
     }
@@ -1755,7 +1796,7 @@ function closeHistory() {
 // No hint anywhere on the page. None of them scrolls the page or jumps anywhere.
 //   d          switch dark and light
 //   r          replay the portfolio (again, or Esc, stops it)
-//   up up down down left right left right b a   the Konami code: a meteor shower (dark mode only)
+//   up up down down left right left right a i   the Konami code: a meteor shower (dark mode only)
 // The arrow keys do nothing else, so they keep scrolling the page as normal.
 document.addEventListener('keydown', (e) => {
   if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
@@ -1913,11 +1954,19 @@ function renderHeatmap() {
 }
 
 // --- Replay ---
-// Press r and the pie glides back to the first day and then forward through the whole portfolio to today: slices
-// swell, shrink, appear and slide away as the trades happen, one continuous motion with no pauses, no labels and
-// no dates. Built from TRADE_FILLS with the same entry-cost weights the pie normally shows, and the
-// last frame is the real pie.
-const REPLAY_STEP_MS = 2300; // time to glide from one trading day's portfolio to the next
+// Press r and the pie goes back in time and plays the portfolio forward to today.
+//  1. A date at the top left ticks back from today to Aug 1, fast and slowing to land on it, while the pie slips
+//     back to its first positions.
+//  2. It holds on Aug 1 for a moment, then the date fades out as the pie starts to move.
+//  3. The pie then moves at one constant pace through every trade up to today: always the same size, only its
+//     proportions change, never a pause on a trading day.
+//  4. At the end today's date fades in and out once.
+// Built from TRADE_FILLS with the same entry-cost weights the pie normally shows, so the last frame is the real pie.
+const REPLAY_BACK_MS = 2800; // the date ticking back, and the pie slipping back to its first positions
+const REPLAY_HOLD_MS = 1500; // holding on Aug 1
+const REPLAY_PLAY_MS = 42000; // the slow, constant journey forward
+const REPLAY_END_MS = 3000; // today's date fading in and out
+const REPLAY_START_DATE = '2026-08-01';
 let replay = null;
 
 function replaySteps() {
@@ -1953,7 +2002,7 @@ function replayOrder(steps) {
 }
 
 // A smooth curve through one slice's size on each trading day (a monotone cubic, so it never swings below zero or
-// overshoots), which keeps every slice moving without ever stopping on a trading day.
+// overshoots).
 function replayCurve(ys) {
   const n = ys.length;
   const d = ys.slice(1).map((y, i) => y - ys[i]);
@@ -1974,11 +2023,54 @@ function replayCurve(ys) {
   };
 }
 
-function replayPositions(x, curves) {
-  return curves
-    .map((c) => ({ ticker: c.ticker, weight: Math.max(0, c.at(x)) }))
-    .filter((p) => p.weight > 0.35);
+// Speeding up and slowing down at the two ends only: 0..1 in, 0..1 out, constant speed in between.
+function replayPace(u, a) {
+  const v = 1 / (1 - a);
+  if (u < a) return (v * u * u) / (2 * a);
+  if (u > 1 - a) return 1 - (v * (1 - u) * (1 - u)) / (2 * a);
+  return v * (u - a / 2);
 }
+
+const replayEase = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+const replayClamp = (v) => Math.max(0, Math.min(1, v));
+
+function replayPositions(weightsAt, order) {
+  return order.map((ticker) => ({ ticker, weight: Math.max(0, weightsAt(ticker)) })).filter((p) => p.weight > 0.35);
+}
+
+// The pie moves at a constant pace measured in how much its proportions actually change, not in trading days, so a
+// quiet stretch between trades goes by as smoothly as a busy one. This maps "how far along the journey" (0..1) to a
+// position on the trading-day curves.
+function replayPath(curves, last) {
+  const SAMPLES = 1500;
+  const cum = [0];
+  let prev = null;
+  for (let i = 0; i <= SAMPLES; i++) {
+    const x = (i / SAMPLES) * last;
+    const raw = curves.map((c) => Math.max(0, c.at(x)));
+    const total = raw.reduce((a, b) => a + b, 0) || 1;
+    const frac = raw.map((w) => (w / total) * 100);
+    if (prev) cum.push(cum[cum.length - 1] + frac.reduce((acc, f, j) => acc + Math.abs(f - prev[j]), 0));
+    prev = frac;
+  }
+  const length = cum[cum.length - 1];
+  return {
+    length,
+    xAt(fraction) {
+      const target = fraction * length;
+      let lo = 0;
+      let hi = SAMPLES;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (cum[mid] < target) lo = mid + 1;
+        else hi = mid;
+      }
+      return (lo / SAMPLES) * last;
+    },
+  };
+}
+
+const replayDayLabel = (ms) => new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
 function startReplay() {
   const section = document.getElementById('allocation');
@@ -1986,38 +2078,99 @@ function startReplay() {
   if (replay || !section || section.hidden || !wrap || lastPositions.length === 0) return;
   closeHistory();
   const steps = replaySteps();
-  // the first keyframe is today's pie, so it glides back to the first day and then forward again to today
-  const today = steps[steps.length - 1];
-  const curves = replayOrder(steps).map((ticker) => ({
-    ticker,
-    at: replayCurve([today, ...steps].map((s) => s.weights[ticker] || 0)),
-  }));
+  const order = replayOrder(steps);
+  const curves = order.map((ticker) => ({ ticker, at: replayCurve(steps.map((st) => st.weights[ticker] || 0)) }));
+  const last = steps.length - 1;
+  const today = steps[last].weights;
+  const first = steps[0].weights;
+
+  const hud = document.createElement('div');
+  hud.className = 'replay-date';
+  wrap.appendChild(hud);
 
   const r = wrap.getBoundingClientRect();
   if (r.top < 60 || r.bottom > window.innerHeight - 20) wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-  replay = { steps, curves, start: performance.now() + 400, frame: null };
+  const utc = (str) => new Date(`${str}T12:00:00Z`).getTime();
+  replay = {
+    hud,
+    order,
+    curves,
+    today,
+    first,
+    last,
+    path: replayPath(curves, last),
+    todayMs: utc(etDateFormat.format(new Date())),
+    startMs: utc(REPLAY_START_DATE),
+    start: performance.now() + 400,
+    frame: null,
+    text: '',
+  };
   pieHover = null;
   const tooltip = document.getElementById('pieTooltip');
   if (tooltip) tooltip.style.opacity = '0';
   replay.frame = requestAnimationFrame(replayLoop);
 }
 
+// Everything on screen at time t (ms since the replay began): the pie's weights, and the date with its opacity and blur.
+function replayState(t) {
+  const R = replay;
+  const lerpWeights = (a, b, k) => (ticker) => (a[ticker] || 0) + ((b[ticker] || 0) - (a[ticker] || 0)) * k;
+  const total = REPLAY_BACK_MS + REPLAY_HOLD_MS + REPLAY_PLAY_MS + REPLAY_END_MS;
+  let weights;
+  let date = { text: '', opacity: 0, blur: 0 };
+
+  if (t < REPLAY_BACK_MS) {
+    // going back: the date ticks back fast and slows to land on Aug 1, the pie slips back with it
+    const p = replayClamp(t / REPLAY_BACK_MS);
+    const ease = 1 - Math.pow(1 - p, 3);
+    weights = lerpWeights(R.today, R.first, replayEase(p));
+    date = {
+      text: replayDayLabel(R.todayMs - (R.todayMs - R.startMs) * ease),
+      opacity: replayClamp(p / 0.1),
+      blur: 2.4 * Math.pow(1 - p, 2),
+    };
+  } else if (t < REPLAY_BACK_MS + REPLAY_HOLD_MS) {
+    weights = (ticker) => R.first[ticker] || 0;
+    date = { text: replayDayLabel(R.startMs), opacity: 1, blur: 0 };
+  } else if (t < REPLAY_BACK_MS + REPLAY_HOLD_MS + REPLAY_PLAY_MS) {
+    // the journey forward: one constant pace, and the date fades out as it sets off
+    const u = (t - REPLAY_BACK_MS - REPLAY_HOLD_MS) / REPLAY_PLAY_MS;
+    const x = R.path.xAt(replayPace(u, 0.025));
+    weights = (ticker) => R.curves.find((c) => c.ticker === ticker).at(x);
+    date = { text: replayDayLabel(R.startMs), opacity: 1 - replayClamp((u * REPLAY_PLAY_MS) / 1100), blur: 0 };
+  } else {
+    // arrived: today's date fades in, rests for a moment, and fades out
+    const e = (t - REPLAY_BACK_MS - REPLAY_HOLD_MS - REPLAY_PLAY_MS) / REPLAY_END_MS;
+    weights = (ticker) => R.today[ticker] || 0;
+    date = { text: replayDayLabel(R.todayMs), opacity: Math.min(replayClamp(e / 0.3), replayClamp((1 - e) / 0.3)), blur: 0 };
+  }
+  return { weights, date, done: t >= total };
+}
+
 function replayLoop(now) {
   if (!replay) return;
-  const t = now - replay.start;
-  const total = replay.steps.length * REPLAY_STEP_MS; // one glide back, then one per trading day
-  if (t > total + 1200) {
+  const t = Math.max(0, now - replay.start);
+  const state = replayState(t);
+  if (state.done) {
     stopReplay();
     return;
   }
-  drawPie(replayPositions(Math.max(0, Math.min(t, total)) / REPLAY_STEP_MS, replay.curves), null);
+  drawPie(replayPositions(state.weights, replay.order), null, true);
+  const hud = replay.hud;
+  if (replay.text !== state.date.text) {
+    replay.text = state.date.text;
+    hud.textContent = state.date.text;
+  }
+  hud.style.opacity = state.date.opacity.toFixed(3);
+  hud.style.filter = state.date.blur > 0.05 ? `blur(${state.date.blur.toFixed(2)}px)` : 'none';
   replay.frame = requestAnimationFrame(replayLoop);
 }
 
 function stopReplay() {
   if (!replay) return;
   cancelAnimationFrame(replay.frame);
+  replay.hud.remove();
   replay = null;
   pieSignature = null; // draw the real pie again
   if (lastPositions.length) renderPie(lastPositions);
@@ -2258,7 +2411,7 @@ async function init() {
       const note = activeNote(p.ticker);
       if (note) {
         li.classList.add('has-note');
-        li.appendChild(buildNote(note.text, note.dateLabel));
+        li.appendChild(buildNote(note.text, note.dateLabel, `pos:${p.ticker}:${note.dateLabel}`));
       }
       list.appendChild(li);
     });
@@ -2379,33 +2532,14 @@ setTimeout(revealData, 3000);
 
 setInterval(tick, 20000);
 
-// The market bell. The refresh above only looks every 20 seconds, so this checks every second and fires the
-// moment the market opens or closes: the status dot sends out one soft ring, the label swaps, and the stars
-// arrive or leave right on the bell.
+// The refresh above only looks every 20 seconds, so this checks the market clock every second: the status label
+// and the stars change on the exact second the market opens or closes. (There is no bell, by Valerio's choice.)
 let lastMarketOpen = isMarketOpen();
-
-function ringBell() {
-  const dot = document.getElementById('statusDot');
-  const text = document.getElementById('marketStatusText');
-  if (dot) {
-    dot.classList.remove('ring');
-    void dot.offsetWidth; // restart the animation if it is already running
-    dot.classList.add('ring');
-    setTimeout(() => dot.classList.remove('ring'), 2000);
-  }
-  if (text) {
-    text.classList.remove('swap');
-    void text.offsetWidth;
-    text.classList.add('swap');
-    setTimeout(() => text.classList.remove('swap'), 800);
-  }
-}
 
 setInterval(() => {
   const open = isMarketOpen();
   if (open === lastMarketOpen) return;
   lastMarketOpen = open;
   updateMarketStatus();
-  ringBell();
   updateSky(false);
 }, 1000);

@@ -182,25 +182,6 @@ h1 {
   flex-shrink: 0;
 }
 
-/* The market bell: one soft ring from the dot, and the label fades up as it changes (script.js ringBell). */
-.status-dot.ring::after {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border: 1px solid var(--accent);
-  border-radius: 50%;
-  animation: bellRing 1.8s ease-out forwards;
-}
-
-@keyframes bellRing {
-  from { transform: scale(1); opacity: 0.8; }
-  to { transform: scale(5.5); opacity: 0; }
-}
-
-#marketStatusText.swap {
-  animation: fadeUp 0.6s ease;
-}
-
 .status-dot.open {
   background: var(--accent);
   animation: statusPulse 2.6s ease-in-out infinite;
@@ -748,6 +729,21 @@ a.closed-ticker:focus-visible {
   color: var(--negative);
 }
 
+/* Replay (r): the date that ticks back to Aug 1, over the top left of the pie. */
+.replay-date {
+  position: absolute;
+  top: 0;
+  left: 2px;
+  z-index: 1;
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  opacity: 0;
+  pointer-events: none;
+  will-change: opacity, filter;
+}
+
 .pie-wrap {
   position: relative;
   width: 100%;
@@ -1157,14 +1153,14 @@ li.note-left > .note::before {
   border-left: 6px solid var(--note-line);
 }
 
-/* Bubbles pop out of their row one by one, each on its own delay and duration (script.js popNotes).
+/* Bubbles pop out of their row one at a time, each on its own delay and duration, once scrolled into view (script.js popNote).
    Only scale and opacity animate, so the side bubbles' own transform is left alone. */
 @keyframes notePop {
   from { opacity: 0; scale: 0.88; }
   to { opacity: 1; scale: 1; }
 }
 
-.js .note.note-wait {
+.note.note-wait {
   opacity: 0;
 }
 
@@ -1184,11 +1180,9 @@ li.note-left > .note.note-pop {
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
   .status-dot.open { animation: none !important; }
-  .status-dot.ring::after { animation: none; opacity: 0; }
-  #marketStatusText.swap { animation: none; }
   .js .rise { opacity: 1; }
   .js .rise.in { animation: none; }
-  .js .note.note-wait { opacity: 1; }
+  .note.note-wait { opacity: 1; }
   .history { transition: none; }
   .history.open .history-head,
   .history.open .history-holding,

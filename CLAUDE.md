@@ -123,9 +123,11 @@ touching any of it:
   `NOTE_DAYS` (14) after its date and then disappears by itself, but stays in the ticker's history for good.
   **Closed positions:** put a `note` on the entry in `CLOSED_POSITIONS`; it shows for as long as the entry is
   one of the 3 most recent.
-- **Pop-out:** after the page has loaded in, the bubbles pop out one at a time (`popNotes` in `script.js`),
-  each with its own delay and duration. Only the first batch animates: the 20 second refresh rebuilds the rows
-  and those bubbles just appear in place.
+- **Pop-out:** each bubble pops (its own delay and duration) only once it has been scrolled properly into view: it must
+  be fully visible and above the bottom 14% of the screen (`IntersectionObserver` in `script.js`). Bubbles below the fold
+  stay invisible until you reach them, and the ones already in view when the page finishes loading pop one after
+  another. A bubble pops once: the 20 second refresh rebuilds the rows, and bubbles that have already popped (remembered
+  by key) just stay shown.
 - **Where a note shows:** on a wide screen (1100px and up) it comes out beside
   its row in the empty margin, alternating right, left, right down the page (the
   other side if the preferred one is blocked; `layoutSideNotes` in `script.js`); on anything narrower,
@@ -313,7 +315,7 @@ All in the "Hidden keyboard shortcuts" block of `script.js`.
 
 - `d`: switch dark and light.
 - `r`: replay (again, or Esc, stops it).
-- **Konami code** (↑ ↑ ↓ ↓ ← → ← → B A): a meteor shower, about 10 seconds of shooting stars, dark mode only (in light mode
+- **Konami code** (↑ ↑ ↓ ↓ ← → ← → **A I**, for Alpha Intelligence, changed from B A on 2026-10-08): a meteor shower, about 10 seconds of shooting stars, dark mode only (in light mode
   nothing happens, on purpose). If the stars are not up (market open) they come down for it and leave afterwards. A held
   key (key repeat) is ignored so it cannot break the code.
 - The arrow keys do nothing else, so they scroll the page as normal. **Removed on 2026-10-08 at Valerio's request:**
@@ -322,12 +324,23 @@ All in the "Hidden keyboard shortcuts" block of `script.js`.
 
 ## Replay (press r)
 
-The pie glides back to the first day and then forward through the whole portfolio to today, as **one continuous
-motion**: no pauses on trading days, and nothing else on screen (no dates, captions or timeline, Valerio's call).
-~2.3s per trading day, 11 days, about 25s. Built from `TRADE_FILLS` with the same entry-cost weights the pie uses; each
-slice follows a smooth monotone curve through its size on every trading day (`replayCurve`), the first and last frames
-are today's real pie, and slices keep today's order so nothing jumps. Esc, or `r` again, stops it. CBOE:RAM and
-OMXSTO:SIVE are not in `TRADE_FILLS` on purpose.
+The pie goes back in time and plays the portfolio forward to today, in four beats (all timings are constants at the top
+of the replay block in `script.js`):
+
+1. A date in the top left of the pie ticks back fast from today to Aug 1, slowing to land on it (it is motion-blurred
+   while fast and sharpens as it lands) while the pie slips back to its first positions. About 2.8s.
+2. It holds on Aug 1 for 1.5s, then the date fades out just as the pie sets off.
+3. The pie then moves at **one constant pace** through every trade up to today, about 42s. Pace is measured in how much
+   the proportions actually change (`replayPath`), not in trading days, so quiet stretches and busy ones go by
+   equally smoothly and it never stops on a trading day (measured: pace varies about 5%). It only eases in and out at the
+   two ends.
+4. At the end today's date fades in, rests, and fades out (3s), and the real pie comes back.
+
+**The pie keeps its exact size and position throughout** (only the proportions change): the replay draws with
+`insideOnly`, so a slice too small for a label simply goes unlabelled instead of getting a leader line, which is what
+used to shrink the pie. Same geometry as the real pie. Built from `TRADE_FILLS` with the same entry-cost weights the pie
+uses, and every slice follows a smooth monotone curve through its size on each trading day (`replayCurve`). The last
+frame is today's real pie. Esc, or `r` again, stops it. CBOE:RAM and OMXSTO:SIVE are not in `TRADE_FILLS` on purpose.
 
 ## Daily returns calendar
 
@@ -338,19 +351,20 @@ shows only on hover** (the percentage nudges up to make room), or on a tap on a 
 "closed" until hovered, then its name (Labor Day, Thanksgiving...). The first part-day is left blank. A day's return
 is the last logged point of the day against the last point of the day before. day against the last point of the day before. It is drawn from the history the page already has, so nothing is stored.
 
-## Market clock and bell
+## Market clock (no bell)
 
 `isMarketOpen()` knows the NYSE holidays and the 1pm early closes for **2026 only** (`NYSE_HOLIDAYS`, a map of
-date to name, plus `NYSE_EARLY_CLOSE`, at the top of the market-status code; `NYSE_CLOSED` is derived from the map). **Add 2027's before 2027 starts.** A one-second watcher fires
-the bell on the exact second the market opens or closes: one soft ring from the status dot, the label fades up, and the
-stars arrive or leave right then (the 20s refresh would be up to 20s late).
+date to name, plus `NYSE_EARLY_CLOSE`, at the top of the market-status code; `NYSE_CLOSED` is derived from the map).
+**Add 2027's before 2027 starts.** A one-second watcher keeps the status label and the stars exact: they change on the
+exact second the market opens or closes, not up to 20s late on the refresh.
+**There is no bell** (no ring on the status dot, no label animation): Valerio asked for it to be removed twice.
 **Known gap:** the server (`api/quotes.js` and `api/cron-update.js`) does not know about holidays, so it logs flat
 points on them (Labor Day 2026 has 87 identical points). The page skips those when drawing the calendar. Fixing the
 logger means touching the history-writing gate, so it was left for Valerio to decide.
 
 ## Tried and dropped
 
-- A `?` hint line or cheat sheet, a countdown or closing recap on the market bell, a separate demo of the bell: not wanted.
+- The market bell (ring on the status dot), a `?` hint line or cheat sheet, a countdown or closing recap: not wanted.
 - Weather: faint clouds and a soft sun in light mode while the market is open, from London's weather (Open-Meteo,
   free, no key), arriving from the top and leaving upward like the stars. Mocked up and rejected by Valerio on
   2026-10-08 ("don't like the sun and clouds"). Don't re-propose it.
