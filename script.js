@@ -12,6 +12,14 @@ let starsInk = '#EEE7D6';
 let starsFrame = null;
 let starsLast = 0;
 
+// The occasional shooting star: the first one SHOOT_FIRST_MS after the stars appear, then one every
+// SHOOT_EVERY_MS for as long as they are up. A quick, faint streak, never while the stars are leaving.
+const SHOOT_FIRST_MS = 30000;
+const SHOOT_EVERY_MS = 90000;
+let nextShootAt = 0;
+let shoot = null;
+let shootSide = 0;
+
 function seededRandom(seed) {
   return () => {
     seed = (seed + 0x6d2b79f5) | 0;
@@ -43,6 +51,53 @@ function buildStars(width) {
     });
   }
   return list;
+}
+
+function drawShootingStar(ctx, now, width) {
+  if (!shoot && starsState === 'on' && now >= nextShootAt) {
+    // Alternate sides, start in the outer thirds so the title and chart stay clear, fall at a shallow angle.
+    const fromLeft = shootSide++ % 2 === 0;
+    const angle = ((18 + Math.random() * 20) * Math.PI) / 180;
+    const dir = fromLeft ? 1 : -1;
+    shoot = {
+      x: width * (fromLeft ? 0.04 + Math.random() * 0.3 : 0.66 + Math.random() * 0.3),
+      y: 25 + Math.random() * 110,
+      vx: Math.cos(angle) * dir,
+      vy: Math.sin(angle),
+      dist: 170 + Math.random() * 90,
+      tail: 70 + Math.random() * 40,
+      start: now,
+      dur: 950,
+    };
+  }
+  if (!shoot) return;
+  const p = (now - shoot.start) / shoot.dur;
+  if (p >= 1 || starsState === 'off' || starsState === 'out') {
+    shoot = null;
+    nextShootAt = now + SHOOT_EVERY_MS;
+    return;
+  }
+  const head = shoot.dist * (1 - Math.pow(1 - p, 1.6));
+  const hx = shoot.x + shoot.vx * head;
+  const hy = shoot.y + shoot.vy * head;
+  const tail = shoot.tail * Math.min(1, p * 4) * (1 - 0.6 * p);
+  const env = Math.min(1, p / 0.12) * Math.min(1, (1 - p) / 0.45);
+  const g = ctx.createLinearGradient(hx - shoot.vx * tail, hy - shoot.vy * tail, hx, hy);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, starsInk);
+  ctx.globalAlpha = 0.6 * env;
+  ctx.strokeStyle = g;
+  ctx.lineWidth = 1.1;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(hx - shoot.vx * tail, hy - shoot.vy * tail);
+  ctx.lineTo(hx, hy);
+  ctx.stroke();
+  ctx.fillStyle = starsInk;
+  ctx.beginPath();
+  ctx.arc(hx, hy, 1.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
 }
 
 function drawStars(now) {
@@ -91,6 +146,8 @@ function drawStars(now) {
   });
   ctx.globalAlpha = 1;
 
+  if (!reduce) drawShootingStar(ctx, now, width);
+
   if (starsState === 'in' && finished) starsState = 'on';
   if (starsState === 'out' && finished) {
     starsState = 'off';
@@ -113,6 +170,10 @@ function setStars(state, fast) {
   starsFast = !!fast;
   starsStart = performance.now();
   starsInk = themeColors().ink;
+  if (state === 'in') {
+    shoot = null;
+    nextShootAt = starsStart + SHOOT_FIRST_MS;
+  }
   if (starsFrame === null) starsFrame = requestAnimationFrame(starsLoop);
 }
 

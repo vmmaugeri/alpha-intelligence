@@ -166,6 +166,10 @@ touching any of it:
   they twinkle very gently. When the market opens (checked on the 20 second refresh, with the same
   `isMarketOpen()` as the status text, so no holiday calendar) they drift up and fade one by one over ~3s.
   Switching to light mode fades them quickly, and `prefers-reduced-motion` shows them still.
+- **Shooting star:** while the stars are up, one faint streak crosses the top (under a second, alternating
+  from the left and right thirds, never over the middle). The first comes **30 seconds after the stars appear**,
+  then **one every 90 seconds** (`SHOOT_FIRST_MS`, `SHOOT_EVERY_MS` in `script.js`). The timer restarts if the
+  stars leave and come back. None with reduced motion. It is meant to be a secret, so do not advertise it.
 - The sky is the same every time (fixed seed) and only the star colour comes from the theme (`--ink`). Keep it
   faint: it is meant to be found, not noticed.
 
