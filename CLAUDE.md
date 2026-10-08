@@ -35,6 +35,11 @@ history), three things need to change together:
    `Closed` entry plus a separate `Trimmed` entry for each earlier trim of
    that position (see below).
 
+**Two more lists need every trade too** (they feed the ticker history card and the replay, not the live numbers):
+`TRADE_LOG` (each buy of a position that is still open) and `TRADE_FILLS` (EVERY fill, buys and sells, as
+`[date, ticker, 'B' or 'S', shares, price]`). Replaying `TRADE_FILLS` in order with a blended average cost must
+give exactly the current `POSITIONS`; check that after adding a trade.
+
 **Before touching these files, verify the trade math with actual code
 execution** (python/node), not by eyeballing it. Confirm sells roughly fund
 buys, confirm gain% and $ figures. Valerio has been burned by silent
@@ -301,8 +306,50 @@ touching any of it:
   (paper-traded but publicly reported) financial data, not a throwaway
   project.
 
+## Hidden keyboard shortcuts (keep this list up to date as they change)
+
+No hint anywhere on the page, deliberately. None of them scrolls or jumps: each only changes something already on
+screen and does nothing when what it controls is out of view. Ignored while typing and with ⌘/Ctrl/Alt held. All in
+the "Hidden keyboard shortcuts" block of `script.js`.
+
+- `d`: switch dark and light.
+- `←` / `→`: step the chart range (24H, 1W, 1M, All), only while the chart is on screen.
+- `↑` / `↓`: flip to the previous or next ticker, only while a ticker's history card is open (the arrows scroll as
+  normal otherwise).
+- `r`: replay (again, or Esc, stops it).
+- **Konami code** (↑ ↑ ↓ ↓ ← → ← → B A): a meteor shower, about 10 seconds of shooting stars, dark mode only. If the
+  stars are not up (market open) they come down for it and leave afterwards. While the code is typed the range
+  arrows stand down so the chart does not change.
+- Not built, by choice: j/k, `$` for dollar view, 1 to 4 for the range, a `?` cheat sheet or hint line.
+
+## Replay (press r)
+
+The pie rewinds to the first trading day and plays forward one day at a time (~1.5s per day, 11 days, ~19s), with the
+date and what was traded above the pie and a progress line below. Built from `TRADE_FILLS` with the same entry-cost
+weights the pie uses, and the last frame equals the real pie. Slices keep today's order so nothing jumps at the end.
+Dust fills (under $100) are left out of the caption only. CBOE:RAM and OMXSTO:SIVE are not in `TRADE_FILLS` on purpose.
+
+## Daily returns calendar
+
+Under Benchmarks: a calendar, one week per row (Mon to Fri). Each day shows its date and its close-to-close
+return, tinted sage or rust by size, today outlined, with the week's return at the end of the row. **The dollar P&L
+shows only on hover, tap or keyboard focus** (the percentage nudges up to make room), and a market holiday says
+"closed" until hovered, then its name (Labor Day, Thanksgiving...). The first part-day is left blank. A day's return
+is the last logged point of the day against the last point of the day before. day against the last point of the day before. It is drawn from the history the page already has, so nothing is stored.
+
+## Market clock and bell
+
+`isMarketOpen()` knows the NYSE holidays and the 1pm early closes for **2026 only** (`NYSE_HOLIDAYS`, a map of
+date to name, plus `NYSE_EARLY_CLOSE`, at the top of the market-status code; `NYSE_CLOSED` is derived from the map). **Add 2027's before 2027 starts.** A one-second watcher fires
+the bell on the exact second the market opens or closes: one soft ring from the status dot, the label fades up, and the
+stars arrive or leave right then (the 20s refresh would be up to 20s late).
+**Known gap:** the server (`api/quotes.js` and `api/cron-update.js`) does not know about holidays, so it logs flat
+points on them (Labor Day 2026 has 87 identical points). The page skips those when drawing the calendar. Fixing the
+logger means touching the history-writing gate, so it was left for Valerio to decide.
+
 ## Tried and dropped
 
+- A `?` hint line or cheat sheet, a countdown or closing recap on the market bell, a separate demo of the bell: not wanted.
 - Weather: faint clouds and a soft sun in light mode while the market is open, from London's weather (Open-Meteo,
   free, no key), arriving from the top and leaving upward like the stars. Mocked up and rejected by Valerio on
   2026-10-08 ("don't like the sun and clouds"). Don't re-propose it.

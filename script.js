@@ -56,36 +56,32 @@ function buildStars(width) {
   return list;
 }
 
-function drawShootingStar(ctx, now, width) {
-  if (!shoot && skyState === 'on' && now >= nextShootAt) {
-    // Alternate sides, start in the outer thirds so the title and chart stay clear, fall at a shallow angle.
-    const fromLeft = shootSide++ % 2 === 0;
-    const angle = ((18 + Math.random() * 20) * Math.PI) / 180;
-    const dir = fromLeft ? 1 : -1;
-    shoot = {
-      x: width * (fromLeft ? 0.04 + Math.random() * 0.3 : 0.66 + Math.random() * 0.3),
-      y: 25 + Math.random() * 110,
-      vx: Math.cos(angle) * dir,
-      vy: Math.sin(angle),
-      dist: 280 + Math.random() * 110,
-      tail: 150 + Math.random() * 70,
-      start: now,
-      dur: SHOOT_LENGTH_MS,
-    };
-  }
-  if (!shoot) return;
-  const p = (now - shoot.start) / shoot.dur;
-  if (p >= 1 || skyState === 'off' || skyState === 'out') {
-    shoot = null;
-    nextShootAt = now + SHOOT_EVERY_MS;
-    return;
-  }
-  const head = shoot.dist * (1 - Math.pow(1 - p, 1.6));
-  const hx = shoot.x + shoot.vx * head;
-  const hy = shoot.y + shoot.vy * head;
-  const tail = shoot.tail * Math.min(1, p * 3) * (1 - 0.5 * p);
+// One meteor: where it starts, which way and how far it falls, and how long its tail is. Alternates sides and
+// starts in the outer thirds so the title and chart stay clear.
+function makeMeteor(start, width, fromLeft) {
+  const angle = ((18 + Math.random() * 20) * Math.PI) / 180;
+  const dir = fromLeft ? 1 : -1;
+  return {
+    x: width * (fromLeft ? 0.04 + Math.random() * 0.3 : 0.66 + Math.random() * 0.3),
+    y: 25 + Math.random() * 110,
+    vx: Math.cos(angle) * dir,
+    vy: Math.sin(angle),
+    dist: 280 + Math.random() * 110,
+    tail: 150 + Math.random() * 70,
+    start,
+    dur: SHOOT_LENGTH_MS,
+  };
+}
+
+function drawMeteor(ctx, m, now) {
+  const p = (now - m.start) / m.dur;
+  if (p < 0 || p >= 1) return;
+  const head = m.dist * (1 - Math.pow(1 - p, 1.6));
+  const hx = m.x + m.vx * head;
+  const hy = m.y + m.vy * head;
+  const tail = m.tail * Math.min(1, p * 3) * (1 - 0.5 * p);
   const env = Math.min(1, p / 0.1) * Math.min(1, (1 - p) / 0.6);
-  const g = ctx.createLinearGradient(hx - shoot.vx * tail, hy - shoot.vy * tail, hx, hy);
+  const g = ctx.createLinearGradient(hx - m.vx * tail, hy - m.vy * tail, hx, hy);
   g.addColorStop(0, 'rgba(0,0,0,0)');
   g.addColorStop(1, skyInk);
   ctx.globalAlpha = 0.6 * env;
@@ -93,7 +89,7 @@ function drawShootingStar(ctx, now, width) {
   ctx.lineWidth = 1.1;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(hx - shoot.vx * tail, hy - shoot.vy * tail);
+  ctx.moveTo(hx - m.vx * tail, hy - m.vy * tail);
   ctx.lineTo(hx, hy);
   ctx.stroke();
   ctx.fillStyle = skyInk;
@@ -101,6 +97,46 @@ function drawShootingStar(ctx, now, width) {
   ctx.arc(hx, hy, 1.1, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = 1;
+}
+
+function drawShootingStar(ctx, now, width) {
+  if (!shoot && skyState === 'on' && now >= nextShootAt) shoot = makeMeteor(now, width, shootSide++ % 2 === 0);
+  if (!shoot) return;
+  if (now - shoot.start >= shoot.dur || skyState === 'off' || skyState === 'out') {
+    shoot = null;
+    nextShootAt = now + SHOOT_EVERY_MS;
+    return;
+  }
+  drawMeteor(ctx, shoot, now);
+}
+
+// The Konami code (up up down down left right left right b a) sets off a meteor shower: about ten seconds of
+// shooting stars, dark mode only. If the stars are not already up (the market is open) they come down for it
+// and leave again afterwards.
+const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
+const SHOWER_METEORS = 8;
+let konamiAt = 0;
+let showerMeteors = [];
+let skyForcedUntil = 0;
+let showerTimer = null;
+
+function startShower() {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const canvas = document.getElementById('sky');
+  if (!dark || reduce || !canvas) return;
+  const now = performance.now();
+  skyForcedUntil = now + 13000;
+  if (skyState === 'off' || skyState === 'out') setSky('in');
+  showerMeteors = [];
+  for (let i = 0; i < SHOWER_METEORS; i++) {
+    showerMeteors.push(makeMeteor(now + 1300 + i * 850 + Math.random() * 300, canvas.clientWidth, i % 2 === 0));
+  }
+  clearTimeout(showerTimer);
+  showerTimer = setTimeout(() => {
+    skyForcedUntil = 0;
+    updateSky(false); // leaves again if the market is open
+  }, 13000);
 }
 
 // How far along one star is. Coming in, it slides down from above the page and settles. Going out, it speeds up
@@ -159,7 +195,11 @@ function drawSky(now) {
   });
   ctx.globalAlpha = 1;
 
-  if (!reduce) drawShootingStar(ctx, now, width);
+  if (!reduce) {
+    drawShootingStar(ctx, now, width);
+    if (skyState === 'in' || skyState === 'on') showerMeteors.forEach((m) => drawMeteor(ctx, m, now));
+    showerMeteors = showerMeteors.filter((m) => now < m.start + m.dur);
+  }
 
   if (skyState === 'in' && finished) skyState = 'on';
   if (skyState === 'out' && finished) {
@@ -193,7 +233,8 @@ function setSky(state, fast) {
 // Called on every refresh, and when the theme changes.
 function updateSky(fast) {
   if (!document.getElementById('sky')) return;
-  const want = document.documentElement.getAttribute('data-theme') === 'dark' && !isMarketOpen();
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const want = dark && (performance.now() < skyForcedUntil || !isMarketOpen());
   if (want && (skyState === 'off' || skyState === 'out')) setSky('in');
   else if (!want && (skyState === 'on' || skyState === 'in')) setSky('out', fast);
 }
@@ -316,10 +357,30 @@ function formatTooltipLabel(isoString) {
 }
 
 // --- Market status (real NYSE hours, via America/New_York time) ---
+// Days the NYSE is closed, with their names, and the two early (1pm) closes, for 2026. Add next year's before
+// it starts.
+const NYSE_HOLIDAYS = {
+  '2026-01-01': "New Year's Day",
+  '2026-01-19': 'MLK Day',
+  '2026-02-16': "Presidents' Day",
+  '2026-04-03': 'Good Friday',
+  '2026-05-25': 'Memorial Day',
+  '2026-06-19': 'Juneteenth',
+  '2026-07-03': 'Independence Day',
+  '2026-09-07': 'Labor Day',
+  '2026-11-26': 'Thanksgiving',
+  '2026-12-25': 'Christmas',
+};
+const NYSE_CLOSED = Object.keys(NYSE_HOLIDAYS);
+const NYSE_EARLY_CLOSE = { '2026-11-27': 13 * 60, '2026-12-24': 13 * 60 };
+
 function getNYParts() {
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
     weekday: 'short',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
     hour: 'numeric',
     minute: 'numeric',
     hour12: false,
@@ -327,14 +388,19 @@ function getNYParts() {
   const parts = fmt.formatToParts(new Date());
   const map = {};
   parts.forEach((p) => (map[p.type] = p.value));
-  return { weekday: map.weekday, hour: parseInt(map.hour, 10), minute: parseInt(map.minute, 10) };
+  return {
+    weekday: map.weekday,
+    date: `${map.year}-${map.month}-${map.day}`,
+    hour: parseInt(map.hour, 10) % 24,
+    minute: parseInt(map.minute, 10),
+  };
 }
 
 function isMarketOpen() {
-  const { weekday, hour, minute } = getNYParts();
-  if (weekday === 'Sat' || weekday === 'Sun') return false;
+  const { weekday, date, hour, minute } = getNYParts();
+  if (weekday === 'Sat' || weekday === 'Sun' || NYSE_CLOSED.includes(date)) return false;
   const minutesNow = hour * 60 + minute;
-  return minutesNow >= 9 * 60 + 30 && minutesNow < 16 * 60;
+  return minutesNow >= 9 * 60 + 30 && minutesNow < (NYSE_EARLY_CLOSE[date] || 16 * 60);
 }
 
 function updateMarketStatus() {
@@ -862,6 +928,76 @@ const TRADE_LOG = {
   ],
 };
 
+// Every fill on the portfolio, one row each: [date, ticker, 'B' buy or 'S' sell, shares, price]. This is the exact
+// export from TradingView paper trading (2026-10-08), minus CBOE:RAM and OMXSTO:SIVE, which the portfolio tracker
+// does not cover. The replay rebuilds the portfolio on any date from these. Replaying them in order, with a
+// blended average cost, gives exactly the current POSITIONS. Every new trade (buy and sell) gets a row here.
+const TRADE_FILLS = [
+  ['2026-08-03', 'BRUN', 'B', 548.9, 20],
+  ['2026-08-03', 'DRAM', 'B', 158, 49],
+  ['2026-08-03', 'AXTI', 'B', 165.48, 57.79],
+  ['2026-08-03', 'IREN', 'B', 271.73, 36.6],
+  ['2026-08-03', 'LITE', 'B', 15.4, 687.06],
+  ['2026-08-03', 'MRVL', 'B', 79.97, 181.3],
+  ['2026-08-03', 'NBIS', 'B', 78.77, 185.5],
+  ['2026-08-03', 'MU', 'B', 24.3, 783.26],
+  ['2026-08-03', 'BRUN', 'B', 144.69, 20.98],
+  ['2026-08-03', 'BRUN', 'B', 0.55, 20.99],
+  ['2026-08-14', 'AXTI', 'S', 69.4, 78.25],
+  ['2026-08-14', 'MU', 'S', 4.85, 975.58],
+  ['2026-08-14', 'DRAM', 'S', 158, 58.02],
+  ['2026-08-14', 'LITE', 'S', 4.21, 890],
+  ['2026-08-14', 'IREN', 'S', 271.73, 44.58],
+  ['2026-08-14', 'MRVL', 'S', 24.45, 222.25],
+  ['2026-08-14', 'AXTI', 'S', 46.44, 77.68],
+  ['2026-08-14', 'CIEN', 'B', 40.42, 429.61],
+  ['2026-08-14', 'VIAV', 'B', 260.6, 43.02],
+  ['2026-08-14', 'AXTI', 'B', 10.32, 77.66],
+  ['2026-08-17', 'MU', 'S', 19.45, 999.6],
+  ['2026-08-17', 'AXTI', 'S', 59.96, 88.01],
+  ['2026-08-17', 'NBIS', 'S', 7.9, 272.82],
+  ['2026-08-17', 'AMZN', 'B', 68.35, 263.37],
+  ['2026-08-17', 'INTC', 'B', 176.28, 102.16],
+  ['2026-08-17', 'SILC', 'B', 125.64, 49.99],
+  ['2026-08-25', 'MRVL', 'S', 55.52, 242.61],
+  ['2026-08-25', 'BE', 'B', 63.23, 213.05],
+  ['2026-08-28', 'AMZN', 'S', 68.34, 266.57],
+  ['2026-08-28', 'AMZN', 'S', 0.01, 266.64],
+  ['2026-08-28', 'LITE', 'S', 11.19, 915.07],
+  ['2026-08-28', 'CIEN', 'S', 16, 389.5],
+  ['2026-08-28', 'VIAV', 'S', 103, 37.41],
+  ['2026-08-28', 'INTC', 'B', 10, 91.62],
+  ['2026-08-28', 'SILC', 'B', 5, 45.24],
+  ['2026-08-28', 'BRUN', 'B', 200, 19.12],
+  ['2026-08-28', 'BE', 'B', 14, 217.74],
+  ['2026-08-28', 'NBIS', 'B', 9, 210.98],
+  ['2026-08-28', 'MRVL', 'B', 70, 222.5],
+  ['2026-08-28', 'CRWD', 'B', 60.7, 215.07],
+  ['2026-08-28', 'CRWD', 'B', 0.01, 215.05],
+  ['2026-09-08', 'CRWD', 'S', 60.72, 207.31],
+  ['2026-09-08', 'CRWD', 'B', 0.01, 207.21],
+  ['2026-09-08', 'NBIS', 'B', 52.57, 239.4],
+  ['2026-09-09', 'MRVL', 'S', 70, 232.46],
+  ['2026-09-09', 'NBIS', 'S', 50, 246.28],
+  ['2026-09-09', 'BE', 'S', 30, 278.14],
+  ['2026-09-09', 'AAOI', 'B', 136.64, 111.21],
+  ['2026-09-09', 'MU', 'B', 21.48, 1011.6],
+  ['2026-09-21', 'BE', 'S', 47.23, 275.79],
+  ['2026-09-21', 'SILC', 'S', 130.64, 48.29],
+  ['2026-09-21', 'SNDK', 'B', 5.77, 1780.99],
+  ['2026-09-21', 'BRUN', 'B', 29.35, 17.58],
+  ['2026-09-21', 'META', 'B', 12.06, 708.13],
+  ['2026-10-02', 'VIAV', 'S', 157.6, 47.21],
+  ['2026-10-02', 'MRVL', 'B', 27.34, 272.42],
+  ['2026-10-06', 'BRUN', 'S', 923.49, 15.5],
+  ['2026-10-06', 'LITE', 'B', 7.16, 1117.08],
+  ['2026-10-06', 'SNDK', 'B', 0.59, 1676.5],
+  ['2026-10-06', 'PENG', 'B', 88.03, 60.5],
+  ['2026-10-07', 'PENG', 'S', 88.03, 72.97],
+  ['2026-10-07', 'MU', 'B', 2.15, 1087],
+  ['2026-10-07', 'SNDK', 'B', 2.37, 1724.08],
+];
+
 function activeNote(ticker) {
   const latest = (TRADE_LOG[ticker] || [])
     .filter((t) => t.comment)
@@ -1304,7 +1440,7 @@ function pieHighlight() {
 }
 
 function setPieHover(index, x, y) {
-  if (!pieState) return;
+  if (!pieState || replay) return;
   if (index !== pieHover) {
     pieHover = index;
     drawPie(pieState.positions, pieHighlight());
@@ -1326,6 +1462,7 @@ function setPieHover(index, x, y) {
 }
 
 function renderPie(positions) {
+  if (replay) return; // a replay is drawing the pie
   const section = document.getElementById('allocation');
   const canvas = document.getElementById('pie');
   if (!section || !canvas) return;
@@ -1370,7 +1507,7 @@ function attachPieInteractivity() {
 
   // Clicking a slice opens that ticker's trade history under the pie; clicking it again closes it.
   canvas.addEventListener('click', (e) => {
-    if (!pieState) return;
+    if (!pieState || replay) return;
     const rect = canvas.getBoundingClientRect();
     const index = pieIndexAt(e.clientX - rect.left, e.clientY - rect.top);
     if (index == null) return;
@@ -1612,6 +1749,310 @@ function closeHistory() {
   const panel = document.getElementById('tickerHistory');
   if (panel) panel.classList.remove('open');
   if (pieState) drawPie(pieState.positions, pieHighlight());
+}
+
+// --- Hidden keyboard shortcuts ---
+// No hint anywhere on the page. None of them scrolls the page or jumps anywhere: each one only changes something
+// that is already on screen, and does nothing when what it controls is out of view.
+//   d          switch dark and light
+//   left/right step the chart range (24H, 1W, 1M, All), only while the chart is on screen
+//   up/down    flip to the previous or next ticker, only while a ticker's history card is open
+//   r          replay the portfolio (again, or Esc, stops it)
+const RANGE_ORDER = ['24H', '1W', '1M', 'All'];
+
+function onScreen(el, margin) {
+  if (!el) return false;
+  const r = el.getBoundingClientRect();
+  return r.bottom > margin && r.top < window.innerHeight - margin;
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
+  const t = e.target;
+  if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+
+  const typed = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (typed === KONAMI[konamiAt]) {
+    konamiAt++;
+    if (konamiAt === KONAMI.length) {
+      konamiAt = 0;
+      startShower();
+      return;
+    }
+  } else {
+    konamiAt = typed === KONAMI[0] ? 1 : 0;
+  }
+
+  if (e.key === 'd' || e.key === 'D') {
+    if (e.repeat) return;
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    applyTheme(dark ? 'light' : 'dark', true);
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    if (konamiAt >= 5 || !onScreen(document.getElementById('chart'), 60)) return; // not while the code is typed
+    const next = RANGE_ORDER.indexOf(selectedRange) + (e.key === 'ArrowRight' ? 1 : -1);
+    if (next < 0 || next >= RANGE_ORDER.length) return;
+    const button = document.querySelector(`.range-btn[data-range="${RANGE_ORDER[next]}"]`);
+    if (button) button.click();
+  } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && pieSelected && pieState && !replay) {
+    const list = pieState.positions;
+    const at = list.findIndex((p) => p.ticker === pieSelected);
+    const next = at + (e.key === 'ArrowDown' ? 1 : -1);
+    if (at === -1 || next < 0 || next >= list.length) return;
+    e.preventDefault(); // while a card is open the arrows flip tickers instead of scrolling
+    openHistory(list[next].ticker);
+  } else if (e.key === 'r' || e.key === 'R') {
+    if (e.repeat) return;
+    toggleReplay();
+  } else if (e.key === 'Escape') {
+    stopReplay();
+  }
+});
+
+// --- Daily returns heatmap ---
+// One small square per trading day, Monday to Friday down and one week per column, shaded by that day's return
+// (sage for up, rust for down). A day counts as a close-to-close move. Market holidays, which the history logger
+// records as a flat line, and the first day (a part day) are left empty.
+const etDateFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }); // YYYY-MM-DD
+
+function dailyReturns(history, currentValue) {
+  const days = [];
+  history.forEach((h) => {
+    const date = etDateFormat.format(new Date(h.t));
+    const last = days[days.length - 1];
+    if (last && last.date === date) last.close = h.value;
+    else days.push({ date, close: h.value });
+  });
+  const lastDay = days[days.length - 1];
+  if (currentValue != null && lastDay && lastDay.date === etDateFormat.format(new Date()) && isMarketOpen()) {
+    lastDay.close = currentValue;
+  }
+  return days.map((d, i) => {
+    if (i === 0) return { date: d.date, close: d.close, ret: null, usd: 0 };
+    const diff = d.close - days[i - 1].close;
+    return { date: d.date, close: d.close, ret: Math.abs(diff) < 0.005 ? null : (diff / days[i - 1].close) * 100, usd: diff };
+  });
+}
+
+let heatSignature = null;
+
+function renderHeatmap() {
+  const wrap = document.getElementById('heat');
+  const grid = document.getElementById('heatGrid');
+  if (!wrap || !grid || lastHistory.length === 0) return;
+  const days = dailyReturns(lastHistory, lastCurrentValue);
+  const byDate = Object.fromEntries(days.map((d) => [d.date, d]));
+  const signature = days.map((d) => `${d.date}:${d.ret == null ? '-' : d.ret.toFixed(3)}`).join('|');
+  if (signature === heatSignature) return;
+  heatSignature = signature;
+
+  const utc = (str) => new Date(`${str}T12:00:00Z`);
+  const first = utc(days[0].date);
+  const monday = new Date(first.getTime() - ((first.getUTCDay() + 6) % 7) * 86400000);
+  const lastDate = utc(days[days.length - 1].date);
+  const weeks = Math.floor((lastDate - monday) / (7 * 86400000)) + 1;
+  const todayKey = etDateFormat.format(new Date());
+  const make = (tag, cls, text) => {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (text != null) el.textContent = text;
+    return el;
+  };
+
+  grid.innerHTML = '';
+  ['M', 'T', 'W', 'T', 'F', 'Week'].forEach((label) => grid.appendChild(make('span', 'heat-head', label)));
+
+  let lastMonth = '';
+  let up = 0;
+  let down = 0;
+  let prevEnd = null; // the close that ended the week before
+  for (let w = 0; w < weeks; w++) {
+    const weekStart = new Date(monday.getTime() + w * 7 * 86400000);
+    // A week is filed under the month its Thursday falls in, so Aug 31 to Sep 4 sits under September.
+    const month = new Date(weekStart.getTime() + 3 * 86400000).toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' });
+    if (month !== lastMonth) {
+      lastMonth = month;
+      grid.appendChild(make('span', 'heat-month', month));
+    }
+    let endClose = null;
+    for (let r = 0; r < 5; r++) {
+      const date = new Date(weekStart.getTime() + r * 86400000);
+      const key = date.toISOString().slice(0, 10);
+      const day = byDate[key];
+      const cell = make('div', 'heat-cell');
+      cell.appendChild(make('span', 'heat-num', String(date.getUTCDate())));
+      if (!day) {
+        cell.classList.add(date > lastDate ? 'future' : 'none');
+      } else {
+        endClose = day.close;
+        if (key === todayKey) cell.classList.add('today');
+        if (NYSE_HOLIDAYS[key]) {
+          cell.classList.add('none', 'has-tip');
+          cell.tabIndex = 0;
+          cell.appendChild(make('span', 'heat-note', 'closed'));
+          cell.appendChild(make('span', 'heat-name', NYSE_HOLIDAYS[key]));
+        } else if (day.ret == null) {
+          cell.classList.add('none');
+          cell.appendChild(make('span', 'heat-note', '—'));
+        } else {
+          cell.classList.add(day.ret > 0 ? 'up' : 'down');
+          cell.style.setProperty('--o', (0.1 + 0.45 * Math.min(1, Math.abs(day.ret) / 6)).toFixed(2));
+          cell.classList.add('has-tip');
+          cell.tabIndex = 0;
+          cell.appendChild(make('span', 'heat-pct', fmtSignedPct(day.ret)));
+          cell.appendChild(make('span', 'heat-usd', fmtSignedUsd(day.usd)));
+          if (day.ret > 0) up++;
+          else down++;
+        }
+      }
+      grid.appendChild(cell);
+    }
+    const weekRet = prevEnd != null && endClose != null ? ((endClose - prevEnd) / prevEnd) * 100 : null;
+    const weekCell = make('span', 'heat-week', weekRet == null ? '—' : fmtSignedPct(weekRet));
+    if (weekRet != null) weekCell.classList.add(weekRet >= 0 ? 'up' : 'down');
+    grid.appendChild(weekCell);
+    if (endClose != null) prevEnd = endClose;
+  }
+  document.getElementById('heatCount').textContent = `${up} up · ${down} down`;
+  wrap.hidden = false;
+}
+
+// --- Replay ---
+// Press r and the pie rewinds to the first day and plays the whole portfolio forward, one trading day at a time:
+// slices grow, shrink, appear and leave as the trades happen, with the date and what was traded on it. Built from
+// TRADE_FILLS; weights are the same entry-cost weights the pie normally shows.
+const REPLAY_STEP_MS = 1500;
+let replay = null;
+
+function replaySteps() {
+  const dates = [...new Set(TRADE_FILLS.map((f) => f[0]))].sort();
+  const hold = {};
+  return dates.map((date) => {
+    const today = TRADE_FILLS.filter((f) => f[0] === date);
+    today.forEach(([, ticker, side, qty, price]) => {
+      const h = hold[ticker] || (hold[ticker] = { qty: 0, cost: 0 });
+      if (side === 'B') {
+        h.qty += qty;
+        h.cost += qty * price;
+      } else {
+        const avg = h.cost / h.qty;
+        h.qty -= qty;
+        h.cost = h.qty * avg;
+      }
+    });
+    const total = Object.values(hold).reduce((sum, h) => sum + (h.qty > 0.005 ? h.cost : 0), 0);
+    const weights = {};
+    Object.entries(hold).forEach(([ticker, h]) => {
+      if (h.qty > 0.005) weights[ticker] = (h.cost / total) * 100;
+    });
+    // Dust (a $2 sliver) is left out of the caption, though it still counts in the weights.
+    const uniq = (side) => [...new Set(today.filter((f) => f[2] === side && f[3] * f[4] >= 100).map((f) => f[1]))];
+    return { date, weights, bought: uniq('B'), sold: uniq('S') };
+  });
+}
+
+// Slices keep the order the real pie has, so nothing jumps when the replay ends: today's holdings first, in
+// today's order, then the ones that were closed along the way.
+function replayOrder(steps) {
+  const order = lastPositions.map((p) => p.ticker);
+  steps.forEach((s) => Object.keys(s.weights).forEach((t) => order.includes(t) || order.push(t)));
+  return order;
+}
+
+function replayFrame(t, steps, order) {
+  const i = Math.max(0, Math.min(steps.length - 1, Math.floor(t / REPLAY_STEP_MS)));
+  const f = Math.max(0, Math.min(1, (t - i * REPLAY_STEP_MS) / REPLAY_STEP_MS));
+  const x = Math.max(0, Math.min(1, f / 0.55));
+  const k = x * x * (3 - 2 * x); // ease in and out while the slices move, then hold
+  const prev = i > 0 ? steps[i - 1].weights : {};
+  const cur = steps[i].weights;
+  const positions = order
+    .map((ticker) => ({ ticker, weight: (prev[ticker] || 0) + ((cur[ticker] || 0) - (prev[ticker] || 0)) * k }))
+    .filter((p) => p.weight > 0.6);
+  return { i, positions, step: steps[i] };
+}
+
+function replayCaption(step) {
+  const list = (tickers) => (tickers.length > 4 ? `${tickers.slice(0, 3).join(', ')} +${tickers.length - 3}` : tickers.join(', '));
+  const parts = [];
+  if (step.sold.length) parts.push(`Sold ${list(step.sold)}`);
+  if (step.bought.length) parts.push(`Bought ${list(step.bought)}`);
+  return parts.join(' \u00b7 ');
+}
+
+function startReplay() {
+  const section = document.getElementById('allocation');
+  const wrap = document.querySelector('.pie-wrap');
+  if (replay || !section || section.hidden || !wrap || lastPositions.length === 0) return;
+  closeHistory();
+  const steps = replaySteps();
+  const order = replayOrder(steps);
+
+  const hud = document.createElement('div');
+  hud.className = 'replay-hud';
+  hud.innerHTML = '<div class="replay-date"></div><div class="replay-note"></div>';
+  const bar = document.createElement('div');
+  bar.className = 'replay-bar';
+  const fill = document.createElement('div');
+  fill.className = 'replay-bar-fill';
+  bar.appendChild(fill);
+  steps.forEach((_, i) => {
+    const tick = document.createElement('span');
+    tick.className = 'replay-tick';
+    tick.style.left = `${((i + 1) / steps.length) * 100}%`;
+    bar.appendChild(tick);
+  });
+  wrap.appendChild(hud);
+  wrap.appendChild(bar);
+  section.classList.add('replaying'); // makes room above the pie for the date and caption
+
+  const r = wrap.getBoundingClientRect();
+  if (r.top < 60 || r.bottom > window.innerHeight - 20) wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  replay = { steps, order, hud, bar, fill, start: performance.now() + 500, frame: null, shown: -1 };
+  pieHover = null;
+  const tooltip = document.getElementById('pieTooltip');
+  if (tooltip) tooltip.style.opacity = '0';
+  replay.frame = requestAnimationFrame(replayLoop);
+}
+
+function renderReplayAt(t) {
+  const { i, positions, step } = replayFrame(t, replay.steps, replay.order);
+  drawPie(positions, null);
+  if (replay.shown !== i) {
+    replay.shown = i;
+    replay.hud.querySelector('.replay-date').textContent = formatClosedDate(step.date);
+    replay.hud.querySelector('.replay-note').textContent = replayCaption(step);
+  }
+  replay.fill.style.width = `${Math.min(100, (Math.max(0, t) / (replay.steps.length * REPLAY_STEP_MS)) * 100)}%`;
+}
+
+function replayLoop(now) {
+  if (!replay) return;
+  const t = now - replay.start;
+  const total = replay.steps.length * REPLAY_STEP_MS;
+  if (t > total + 1600) {
+    stopReplay();
+    return;
+  }
+  if (t >= 0) renderReplayAt(Math.min(t, total - 1));
+  else drawPie([], null);
+  replay.frame = requestAnimationFrame(replayLoop);
+}
+
+function stopReplay() {
+  if (!replay) return;
+  cancelAnimationFrame(replay.frame);
+  replay.hud.remove();
+  replay.bar.remove();
+  document.getElementById('allocation').classList.remove('replaying');
+  replay = null;
+  pieSignature = null; // draw the real pie again
+  if (lastPositions.length) renderPie(lastPositions);
+}
+
+function toggleReplay() {
+  if (replay) stopReplay();
+  else startReplay();
 }
 
 // --- Benchmarks and alpha ---
@@ -1872,6 +2313,12 @@ async function init() {
     }
 
     try {
+      renderHeatmap();
+    } catch (heatErr) {
+      console.error(heatErr);
+    }
+
+    try {
       renderBenchmarks(data);
     } catch (benchErr) {
       console.error(benchErr);
@@ -1957,3 +2404,34 @@ Promise.allSettled([firstTick, fontsReady]).then(revealData);
 setTimeout(revealData, 3000);
 
 setInterval(tick, 20000);
+
+// The market bell. The refresh above only looks every 20 seconds, so this checks every second and fires the
+// moment the market opens or closes: the status dot sends out one soft ring, the label swaps, and the stars
+// arrive or leave right on the bell.
+let lastMarketOpen = isMarketOpen();
+
+function ringBell() {
+  const dot = document.getElementById('statusDot');
+  const text = document.getElementById('marketStatusText');
+  if (dot) {
+    dot.classList.remove('ring');
+    void dot.offsetWidth; // restart the animation if it is already running
+    dot.classList.add('ring');
+    setTimeout(() => dot.classList.remove('ring'), 2000);
+  }
+  if (text) {
+    text.classList.remove('swap');
+    void text.offsetWidth;
+    text.classList.add('swap');
+    setTimeout(() => text.classList.remove('swap'), 800);
+  }
+}
+
+setInterval(() => {
+  const open = isMarketOpen();
+  if (open === lastMarketOpen) return;
+  lastMarketOpen = open;
+  updateMarketStatus();
+  ringBell();
+  updateSky(false);
+}, 1000);
