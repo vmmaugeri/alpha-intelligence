@@ -113,6 +113,30 @@ function drawShootingStar(ctx, now, width) {
 // The Konami code, with an A I at the end for Alpha Intelligence (up up down down left right left right a i), sets off a meteor shower: about ten seconds of
 // shooting stars, dark mode only. If the stars are not already up (the market is open) they come down for it
 // and leave again afterwards.
+// Smooth scroll that we drive ourselves, so the caller knows how long it takes (0 when nothing needs to move or
+// the visitor prefers reduced motion). Returns the duration in ms.
+function scrollPageTo(target) {
+  const max = document.documentElement.scrollHeight - window.innerHeight;
+  const to = Math.max(0, Math.min(max, Math.round(target)));
+  const from = window.scrollY;
+  const dist = to - from;
+  if (Math.abs(dist) < 4) return 0;
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) {
+    window.scrollTo(0, to);
+    return 0;
+  }
+  const dur = Math.min(1100, 400 + Math.abs(dist) * 0.25);
+  const t0 = performance.now();
+  const step = (now) => {
+    const p = Math.min(1, (now - t0) / dur);
+    window.scrollTo(0, from + dist * (p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2));
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+  return dur;
+}
+
 const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'a', 'i'];
 const SHOWER_METEORS = 8;
 let konamiAt = 0;
@@ -125,7 +149,9 @@ function startShower() {
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const canvas = document.getElementById('sky');
   if (!dark || reduce || !canvas) return;
-  const now = performance.now();
+  // The sky sits at the very top, so the page glides up there first and the shower starts once it arrives.
+  const lift = scrollPageTo(0);
+  const now = performance.now() + lift;
   skyForcedUntil = now + 13000;
   if (skyState === 'off' || skyState === 'out') setSky('in');
   showerMeteors = [];
@@ -136,7 +162,7 @@ function startShower() {
   showerTimer = setTimeout(() => {
     skyForcedUntil = 0;
     updateSky(false); // leaves again if the market is open
-  }, 13000);
+  }, 13000 + lift);
 }
 
 // How far along one star is. Coming in, it slides down from above the page and settles. Going out, it speeds up
@@ -2011,6 +2037,7 @@ function renderHeatmap() {
       cell.appendChild(make('span', 'heat-num', String(date.getUTCDate())));
       if (!day) {
         cell.classList.add(date > lastDate ? 'future' : 'none');
+        if (date <= lastDate) cell.appendChild(make('span', 'heat-note', 'no data'));
       } else {
         endClose = day.close;
         if (key === todayKey) cell.classList.add('today');
@@ -2020,7 +2047,7 @@ function renderHeatmap() {
           cell.appendChild(make('span', 'heat-name', NYSE_HOLIDAYS[key]));
         } else if (day.ret == null) {
           cell.classList.add('none');
-          cell.appendChild(make('span', 'heat-note', '—'));
+          cell.appendChild(make('span', 'heat-note', 'no data'));
         } else {
           cell.classList.add(day.ret > 0 ? 'up' : 'down');
           cell.style.setProperty('--o', (0.1 + 0.45 * Math.min(1, Math.abs(day.ret) / 6)).toFixed(2));
@@ -2034,8 +2061,9 @@ function renderHeatmap() {
       grid.appendChild(cell);
     }
     const weekRet = prevEnd != null && endClose != null ? ((endClose - prevEnd) / prevEnd) * 100 : null;
-    const weekCell = make('span', 'heat-week', weekRet == null ? '—' : fmtSignedPct(weekRet));
-    if (weekRet != null) weekCell.classList.add(weekRet >= 0 ? 'up' : 'down');
+    const weekCell = make('span', 'heat-week', weekRet == null ? 'no data' : fmtSignedPct(weekRet));
+    if (weekRet == null) weekCell.classList.add('empty');
+    else weekCell.classList.add(weekRet >= 0 ? 'up' : 'down');
     grid.appendChild(weekCell);
     if (endClose != null) prevEnd = endClose;
   }
@@ -2196,8 +2224,8 @@ function startReplay() {
   hud.className = 'replay-date';
   wrap.appendChild(hud);
 
-  const r = wrap.getBoundingClientRect();
-  if (r.top < 60 || r.bottom > window.innerHeight - 20) wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  // Always bring the pie into the middle of the screen first, then the replay starts.
+  const scrollMs = scrollPageTo(wrap.getBoundingClientRect().top + window.scrollY - (window.innerHeight - wrap.offsetHeight) / 2);
 
   const utc = (str) => new Date(`${str}T12:00:00Z`).getTime();
   replay = {
@@ -2212,7 +2240,7 @@ function startReplay() {
     startMs: utc(REPLAY_START_DATE),
     dateKeys,
     lastMs: utcMs(steps[last].date),
-    start: performance.now() + 400,
+    start: performance.now() + scrollMs + 400,
     frame: null,
     text: '',
     fade: { state: {}, room: {}, k: 1, kDown: 1, dt: 16 },

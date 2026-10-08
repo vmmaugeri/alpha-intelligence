@@ -315,9 +315,9 @@ No hint anywhere on the page, deliberately. None of them scrolls or jumps. Ignor
 All in the "Hidden keyboard shortcuts" block of `script.js`.
 
 - `d`: switch dark and light.
-- `r`: replay (again, or Esc, stops it).
+- `r`: replay (again, or Esc, stops it). It always glides the page to the pie first (`scrollPageTo`), then starts.
 - **Konami code** (↑ ↑ ↓ ↓ ← → ← → **A I**, for Alpha Intelligence, changed from B A on 2026-10-08): a meteor shower, about 10 seconds of shooting stars, dark mode only (in light mode
-  nothing happens, on purpose). If the stars are not up (market open) they come down for it and leave afterwards. A held
+  nothing happens, on purpose). The page first glides to the top (the sky is there) and the shower starts once it arrives, so it is always seen in full. If the stars are not up (market open) they come down for it and leave afterwards. A held
   key (key repeat) is ignored so it cannot break the code.
 - The arrow keys do nothing else, so they scroll the page as normal. **Removed on 2026-10-08 at Valerio's request:**
   left/right stepping the chart range and up/down flipping tickers on the pie card. Do not bring them back.
@@ -374,8 +374,8 @@ Under Benchmarks: a calendar, one week per row (Mon to Fri). Each day shows its 
 return, tinted sage or rust by size, today outlined, with the week's return at the end of the row. **The dollar P&L
 shows only on hover** (the percentage nudges up to make room), or on a tap on a touch screen, which stays open through the
 20 second refresh until the next tap. Days cannot be selected, focused or highlighted by clicking (`user-select: none`, no tab stops), and a market holiday says
-"closed" until hovered, then its name (Labor Day, Thanksgiving...). The first part-day is left blank. A day's return
-is the last logged point of the day against the last point of the day before. day against the last point of the day before. It is drawn from the history the page already has, so nothing is stored.
+"closed" until hovered, then its name (Labor Day, Thanksgiving...). Days with no history (before Aug 12, and the part-day Aug 12 itself, which starts at 3:45pm ET so has no prior close) and a week with no prior close say "no data", never a dash. A day's return
+is the last logged point of the day against the last point of the day before. It is drawn from the history the page already has, so nothing is stored.
 
 ## Market clock (no bell)
 

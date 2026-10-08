@@ -721,6 +721,11 @@ a.closed-ticker:focus-visible {
   color: var(--muted);
 }
 
+.heat-week.empty {
+  font-size: 9px;
+  font-weight: 400;
+}
+
 .heat-week.up {
   color: var(--accent);
 }
