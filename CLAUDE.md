@@ -221,6 +221,12 @@ touching any of it:
   pings, can trip the limit — which then serves a *frozen, identical* quote
   instead of an error. If prices ever look stuck, check `/api/debug-history`
   for a repeating value before assuming the code is broken.
+- **A failed refresh must not change the page's height.** The page refreshes every 20 seconds, and a
+  failure (usually Finnhub rate limiting) used to swap the headline for "Unable to load prices", which wraps
+  to two lines on a phone and pushed the reader's scroll position down ~38px until the next good refresh.
+  Now `init()` keeps the last good numbers once anything has loaded (`hasLoaded`) and shows the error only if
+  the very first load fails. The benchmarks section likewise keeps its last rows if only the ETF quotes fail.
+  Keep any new refresh-driven element the same: never hide, replace or resize content above the reader on an error.
 - **`isMarketOpenNow()` gates ALL history logging** to real NYSE hours
   (9:30am–4pm ET, weekdays). This is deliberate — it prevents flat, stale
   overnight/weekend data from polluting the chart. Don't remove it.

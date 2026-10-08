@@ -523,19 +523,6 @@ a.closed-ticker:focus-visible {
   display: block;
 }
 
-.allocation-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-}
-
-.allocation-hint {
-  font-size: 10px;
-  font-weight: 400;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
 /* The ticker history that opens under the pie when a slice is clicked. The height animates through a grid
    row (0fr to 1fr), and each line inside then fades up in turn, like the rest of the page. */
 .history {

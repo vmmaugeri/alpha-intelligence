@@ -1410,7 +1410,8 @@ function renderBenchmarks(data) {
 
   const benchmarks = data.benchmarks || [];
   if (benchmarks.length === 0 || !data.trueOriginValue) {
-    section.hidden = true;
+    // If the rows are already showing, keep the last ones rather than collapsing the section for a refresh.
+    if (benchKey === null) section.hidden = true;
     return;
   }
 
@@ -1496,6 +1497,11 @@ function updateFavicon(isPositive) {
   const link = document.getElementById('favicon');
   if (link) link.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
 }
+
+// True once a refresh has put real numbers on the page. After that, a failed refresh leaves them alone:
+// swapping the headline for an error message changes the page's height above the reader and drags their
+// scroll position with it.
+let hasLoaded = false;
 
 async function init() {
   const valueEl = document.getElementById('currentValue');
@@ -1589,8 +1595,9 @@ async function init() {
     document.getElementById('updated').textContent =
       'Updated ' + new Date(data.updatedAt).toLocaleString();
     if (dataRevealed) popNotes(300); // bubbles that only turned up after the page was already revealed
+    hasLoaded = true;
   } catch (err) {
-    valueEl.textContent = 'Unable to load prices';
+    if (!hasLoaded) valueEl.textContent = 'Unable to load prices';
     console.error(err);
   }
 }
