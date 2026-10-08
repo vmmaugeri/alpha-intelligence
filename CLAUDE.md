@@ -316,6 +316,16 @@ All in the "Hidden keyboard shortcuts" block of `script.js`.
 
 - `d`: switch dark and light.
 - `r`: replay (again, or Esc, stops it). It always glides the page to the pie first (`scrollPageTo`), then starts.
+- `m`: the market status shows "Opens in 17h 14m" or "Closes in ..." for 4 seconds, then goes back.
+- `t`: glides back to the top (the one shortcut that scrolls, by choice).
+- `g`: the headline value tints sage or rust for ~1.6s, by whether today is up or down against the last close of the day before.
+- `p`: the pie melts like lava for 8s (an SVG filter, `#melt` in `index.html`: lines thicken, blur, then a threshold
+  rounds them into blobs that flow together), then sets again. `p` again stops it. Ignored during a replay and with reduced motion.
+  **Valerio asked for the pie to type out Venditti's "Roma" lyrics with the recording playing. Declined on purpose:** it is a
+  copyrighted song and the site and repo are public. Do not add it. If he writes lyrics that are truly his own, they can go in.
+- Typed words (the last 5 letters, reset after 1.5s): `alpha` pulses the Alpha figures, `worth` fades the subtitle to
+  "Worth knowing." and back, `best` outlines the best of the 3 shown closed trades. While a word is being typed, `r`, `t` and `p`
+  stay quiet (`quirkWordTyping`), so typing "worth" does not start a replay. Code is the "Little shortcut quirks" block.
 - **Konami code** (↑ ↑ ↓ ↓ ← → ← → **A I**, for Alpha Intelligence, changed from B A on 2026-10-08): a meteor shower, about 10 seconds of shooting stars, dark mode only (in light mode
   nothing happens, on purpose). The page first glides to the top (the sky is there) and the shower starts once it arrives, so it is always seen in full. If the stars are not up (market open) they come down for it and leave afterwards. A held
   key (key repeat) is ignored so it cannot break the code.

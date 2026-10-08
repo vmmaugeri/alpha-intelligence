@@ -400,7 +400,7 @@ const NYSE_HOLIDAYS = {
 const NYSE_CLOSED = Object.keys(NYSE_HOLIDAYS);
 const NYSE_EARLY_CLOSE = { '2026-11-27': 13 * 60, '2026-12-24': 13 * 60 };
 
-function getNYParts() {
+function getNYParts(at = new Date()) {
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
     weekday: 'short',
@@ -411,7 +411,7 @@ function getNYParts() {
     minute: 'numeric',
     hour12: false,
   });
-  const parts = fmt.formatToParts(new Date());
+  const parts = fmt.formatToParts(at);
   const map = {};
   parts.forEach((p) => (map[p.type] = p.value));
   return {
@@ -422,18 +422,23 @@ function getNYParts() {
   };
 }
 
-function isMarketOpen() {
-  const { weekday, date, hour, minute } = getNYParts();
+function isMarketOpen(at = new Date()) {
+  const { weekday, date, hour, minute } = getNYParts(at);
   if (weekday === 'Sat' || weekday === 'Sun' || NYSE_CLOSED.includes(date)) return false;
   const minutesNow = hour * 60 + minute;
   return minutesNow >= 9 * 60 + 30 && minutesNow < (NYSE_EARLY_CLOSE[date] || 16 * 60);
 }
 
+let statusPeekUntil = 0;
 function updateMarketStatus() {
   const text = document.getElementById('marketStatusText');
   const dot = document.getElementById('statusDot');
   if (!text) return;
   const open = isMarketOpen();
+  if (performance.now() < statusPeekUntil) {
+    if (dot) dot.classList.toggle('open', open);
+    return; // the m shortcut is showing the countdown
+  }
   text.textContent = open ? 'Market open' : 'Market closed';
   if (dot) dot.classList.toggle('open', open);
 }
@@ -1908,10 +1913,158 @@ function closeHistory() {
   if (pieState) drawPie(pieState.positions, pieHighlight());
 }
 
+// --- Little shortcut quirks ---
+// All hidden, none of them scrolls the page except t. Each only changes something for a few seconds.
+//   m      the market status shows how long until the market opens or closes
+//   t      glides back to the top
+//   g      the headline tints sage or rust for a second, by whether today is up or down
+//   p      the pie melts like lava and sets again (p again stops it)
+//   alpha  the alpha figures pulse     worth  the subtitle whispers     best  the best closed trade is outlined
+const QUIRK_WORDS = ['alpha', 'worth', 'best'];
+let quirkTyped = '';
+let quirkTimer = null;
+const quirkReduce = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function flashClass(el, cls, ms) {
+  if (!el) return;
+  el.classList.remove(cls);
+  void el.offsetWidth; // restart the animation if it is already running
+  el.classList.add(cls);
+  setTimeout(() => el.classList.remove(cls), ms);
+}
+
+function quirkMarket() {
+  const text = document.getElementById('marketStatusText');
+  if (!text) return;
+  const open = isMarketOpen();
+  let mins = 0;
+  for (let i = 1; i <= 60 * 24 * 6; i++) {
+    if (isMarketOpen(new Date(Date.now() + i * 60000)) !== open) {
+      mins = i;
+      break;
+    }
+  }
+  if (!mins) return;
+  const d = Math.floor(mins / 1440);
+  const h = Math.floor((mins % 1440) / 60);
+  const m = mins % 60;
+  const span = d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}m`;
+  text.textContent = `${open ? 'Closes' : 'Opens'} in ${span}`;
+  statusPeekUntil = performance.now() + 4000;
+  setTimeout(updateMarketStatus, 4050);
+}
+
+function quirkTint() {
+  const el = document.getElementById('currentValue');
+  if (!el) return;
+  const today = etDateFormat.format(new Date());
+  let base = null;
+  for (let i = lastHistory.length - 1; i >= 0; i--) {
+    if (etDateFormat.format(new Date(lastHistory[i].t)) !== today) {
+      base = lastHistory[i].value;
+      break;
+    }
+  }
+  if (base == null || lastCurrentValue == null) return;
+  flashClass(el, lastCurrentValue >= base ? 'tint-up' : 'tint-down', 1600);
+}
+
+let meltFrame = null;
+function quirkMelt() {
+  const canvas = document.getElementById('pie');
+  const blur = document.getElementById('meltBlur');
+  const section = document.getElementById('allocation');
+  if (!canvas || !blur || !section || section.hidden || replay || quirkReduce()) return;
+  if (meltFrame) {
+    cancelAnimationFrame(meltFrame);
+    meltFrame = null;
+    canvas.style.filter = '';
+    return;
+  }
+  const t0 = performance.now();
+  const total = 8000;
+  canvas.style.filter = 'url(#melt)';
+  const step = (now) => {
+    const p = Math.min(1, (now - t0) / total);
+    const env = Math.sin(Math.PI * p);
+    // The lines thicken first so the blur has something to merge, then the threshold in the filter rounds the
+    // result off into blobs that flow into each other.
+    document.getElementById('meltGrow').setAttribute('radius', (4 * env).toFixed(2));
+    blur.setAttribute('stdDeviation', (1 + 5 * env * env).toFixed(2));
+    if (p < 1) meltFrame = requestAnimationFrame(step);
+    else {
+      meltFrame = null;
+      canvas.style.filter = '';
+    }
+  };
+  meltFrame = requestAnimationFrame(step);
+}
+
+function quirkAlpha() {
+  document.querySelectorAll('.bench-alpha-val').forEach((el) => flashClass(el, 'pulse', 1400));
+}
+
+function quirkWorth() {
+  const el = document.querySelector('.subtitle');
+  if (!el || el.dataset.whisper) return;
+  const original = el.textContent;
+  el.dataset.whisper = '1';
+  el.classList.add('whisper'); // fades out
+  setTimeout(() => {
+    el.textContent = 'Worth knowing.';
+    el.classList.remove('whisper'); // fades the new line in
+  }, 400);
+  setTimeout(() => el.classList.add('whisper'), 3400);
+  setTimeout(() => {
+    el.textContent = original;
+    el.classList.remove('whisper');
+    delete el.dataset.whisper;
+  }, 3800);
+}
+
+function quirkBest() {
+  let best = null;
+  let bestPct = -Infinity;
+  document.querySelectorAll('#closedPositions li').forEach((li) => {
+    const m = /([+-]?\d+(?:\.\d+)?)%/.exec((li.querySelector('.closed-change') || {}).textContent || '');
+    if (m && parseFloat(m[1]) > bestPct) {
+      bestPct = parseFloat(m[1]);
+      best = li;
+    }
+  });
+  flashClass(best, 'best-glow', 2400);
+}
+
+// Returns true when the key belongs to a word being typed, so single-key shortcuts such as r, t and p stay quiet
+// while someone types "worth", "best" or "alpha".
+function quirkWordTyping(key) {
+  if (!/^[a-z]$/.test(key)) {
+    quirkTyped = '';
+    return false;
+  }
+  clearTimeout(quirkTimer);
+  quirkTimer = setTimeout(() => (quirkTyped = ''), 1500);
+  quirkTyped = (quirkTyped + key).slice(-5);
+  for (const word of QUIRK_WORDS) {
+    if (quirkTyped.endsWith(word)) {
+      quirkTyped = '';
+      ({ alpha: quirkAlpha, worth: quirkWorth, best: quirkBest })[word]();
+      return true;
+    }
+  }
+  return QUIRK_WORDS.some((word) => {
+    for (let n = Math.min(word.length - 1, quirkTyped.length); n >= 2; n--) {
+      if (quirkTyped.endsWith(word.slice(0, n))) return true;
+    }
+    return false;
+  });
+}
+
 // --- Hidden keyboard shortcuts ---
 // No hint anywhere on the page. None of them scrolls the page or jumps anywhere.
 //   d          switch dark and light
 //   r          replay the portfolio (again, or Esc, stops it)
+//   m t g p    and the words alpha, worth, best: see "Little shortcut quirks" above
 //   up up down down left right left right a i   the Konami code: a meteor shower (dark mode only)
 // The arrow keys do nothing else, so they keep scrolling the page as normal.
 document.addEventListener('keydown', (e) => {
@@ -1931,6 +2084,13 @@ document.addEventListener('keydown', (e) => {
   } else {
     konamiAt = typed === KONAMI[0] ? 1 : 0;
   }
+
+  if (e.repeat) return;
+  if (quirkWordTyping(typed)) return;
+  if (typed === 'm') quirkMarket();
+  else if (typed === 't') scrollPageTo(0);
+  else if (typed === 'g') quirkTint();
+  else if (typed === 'p') quirkMelt();
 
   if (e.key === 'd' || e.key === 'D') {
     if (e.repeat) return;
