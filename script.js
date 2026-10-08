@@ -16,6 +16,7 @@ let starsLast = 0;
 // SHOOT_EVERY_MS for as long as they are up. A quick, faint streak, never while the stars are leaving.
 const SHOOT_FIRST_MS = 30000;
 const SHOOT_EVERY_MS = 90000;
+const SHOOT_LENGTH_MS = 1900;
 let nextShootAt = 0;
 let shoot = null;
 let shootSide = 0;
@@ -64,10 +65,10 @@ function drawShootingStar(ctx, now, width) {
       y: 25 + Math.random() * 110,
       vx: Math.cos(angle) * dir,
       vy: Math.sin(angle),
-      dist: 170 + Math.random() * 90,
-      tail: 70 + Math.random() * 40,
+      dist: 280 + Math.random() * 110,
+      tail: 150 + Math.random() * 70,
       start: now,
-      dur: 950,
+      dur: SHOOT_LENGTH_MS,
     };
   }
   if (!shoot) return;
@@ -80,8 +81,8 @@ function drawShootingStar(ctx, now, width) {
   const head = shoot.dist * (1 - Math.pow(1 - p, 1.6));
   const hx = shoot.x + shoot.vx * head;
   const hy = shoot.y + shoot.vy * head;
-  const tail = shoot.tail * Math.min(1, p * 4) * (1 - 0.6 * p);
-  const env = Math.min(1, p / 0.12) * Math.min(1, (1 - p) / 0.45);
+  const tail = shoot.tail * Math.min(1, p * 3) * (1 - 0.5 * p);
+  const env = Math.min(1, p / 0.1) * Math.min(1, (1 - p) / 0.6);
   const g = ctx.createLinearGradient(hx - shoot.vx * tail, hy - shoot.vy * tail, hx, hy);
   g.addColorStop(0, 'rgba(0,0,0,0)');
   g.addColorStop(1, starsInk);
