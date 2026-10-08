@@ -112,11 +112,11 @@ touching any of it:
   position: how much was added to or opened in it, or how much a close made,
   plus a one-line reason when Valerio gives one. One or two sentences at most,
   plain and non-promotional.
-- **Open positions:** add the note to `POSITION_NOTES` in `script.js` (keyed by
-  ticker, with a date). It shows for `NOTE_DAYS` (14) after that date and then
-  disappears by itself, so there is nothing to clean up. **Closed positions:**
-  put a `note` on the entry in `CLOSED_POSITIONS`; it shows for as long as the
-  entry is one of the 3 most recent.
+- **Open positions:** add the buy to `TRADE_LOG` in `script.js` (keyed by ticker: date, `Opened` or
+  `Added`, shares, fill price, and a `comment` when there is a note). A comment shows as the bubble for
+  `NOTE_DAYS` (14) after its date and then disappears by itself, but stays in the ticker's history for good.
+  **Closed positions:** put a `note` on the entry in `CLOSED_POSITIONS`; it shows for as long as the entry is
+  one of the 3 most recent.
 - **Pop-out:** after the page has loaded in, the bubbles pop out one at a time (`popNotes` in `script.js`),
   each with its own delay and duration. Only the first batch animates: the 20 second refresh rebuilds the rows
   and those bubbles just appear in place.
@@ -132,6 +132,26 @@ touching any of it:
   any other published text. Prefer a primary source (an SEC 8-K or a company
   release) and compute the trade numbers from the fills. If a claim can't be
   confirmed, leave it out and tell Valerio instead of publishing it.
+
+## Ticker history (click a slice in the pie)
+
+- Clicking a slice opens that ticker's history under the pie (click again, the x, or Escape closes it): every
+  buy from `TRADE_LOG`, every sale from `CLOSED_POSITIONS` with its return and $ gain, the comments, and three
+  live figures (Realized, Open, Net P&L). Nothing extra to maintain: it reads the same two arrays as the rest
+  of the page. **So every rebalance should log each buy in `TRADE_LOG`**, with its date and fill price.
+- `TRADE_LOG` holds every buy for the open tickers, including the buys behind trades since closed, so a
+  sale never appears without its purchase. Rows up to 2026-09-09 were rebuilt from the repo's git history
+  (date = the day the position was updated here, Opened price = entry price, Added price = back-solved from
+  the blended entry) rather than typed from order screenshots, so correct them from TradingView if one is off.
+  **Check after any edit:** replaying a ticker's `TRADE_LOG` buys and its `CLOSED_POSITIONS` sells in date order
+  must end at that ticker's current size and entry price in `POSITIONS`, and no sale may come before the first
+  buy. If a trim's sale price is ever missing, leave it out of the log and ask for the fill from TradingView
+  rather than guessing, since a size drop with no sale on record would fail that replay.
+- A trim of a position that is still open is also its own `Trimmed` entry in `CLOSED_POSITIONS` (as for NBIS Aug 15
+  and CIEN Aug 28), so it counts in Realized and in the win rate.
+- The open position's share count isn't in the API response, so the panel backs it out of the weight
+  (`openPosition`). Open P&L is on the current blended entry price, Realized is the sum of that ticker's
+  `CLOSED_POSITIONS` entries.
 
 ## Light / dark theme
 

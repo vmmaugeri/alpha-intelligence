@@ -59,7 +59,7 @@ function applyTheme(theme, save) {
 
   const redraw = () => {
     if (lastHistory.length > 0) renderChart();
-    if (pieState) drawPie(pieState.positions, pieHover);
+    if (pieState) drawPie(pieState.positions, pieHighlight());
     canvases.forEach((c) => (c.style.opacity = ''));
   };
   clearTimeout(themeRedrawTimer);
@@ -444,6 +444,13 @@ const CLOSED_POSITIONS = [
     sells: [{ qty: 30, price: 278.14 }],
   },
   {
+    ticker: 'NBIS',
+    status: 'Trimmed',
+    date: '2026-09-09',
+    buys: [{ qty: 50, price: 208.63 }],
+    sells: [{ qty: 50, price: 246.28 }],
+  },
+  {
     ticker: 'CRWD',
     status: 'Closed',
     date: '2026-09-08',
@@ -466,6 +473,13 @@ const CLOSED_POSITIONS = [
     date: '2026-08-28',
     buys: [{ qty: 103, price: 43.02 }],
     sells: [{ qty: 103, price: 37.41 }],
+  },
+  {
+    ticker: 'CIEN',
+    status: 'Trimmed',
+    date: '2026-08-28',
+    buys: [{ qty: 16, price: 429.61 }],
+    sells: [{ qty: 16, price: 389.5 }],
   },
   {
     ticker: 'IREN',
@@ -557,23 +571,63 @@ function formatClosedDate(dateStr) {
 // disappear by themselves. A closed position keeps its note on its CLOSED_POSITIONS entry, so it shows
 // for as long as that entry is one of the most recent.
 const NOTE_DAYS = 14;
-const POSITION_NOTES = {
-  MU: {
-    date: '2026-10-07',
-    text: 'Added 2.15 shares ($2,337) ahead of Samsung’s early Q3 figures on Thu 8 Oct, where the tone on memory prices and margins matters most for MU.',
-  },
-  SNDK: {
-    date: '2026-10-07',
-    text: 'Added 2.37 shares ($4,086) for the same Samsung read on Thu 8 Oct, as memory pricing and margins drive SanDisk too.',
-  },
+
+// Every buy on record for the positions still open, including the buys behind trades since closed (sells live
+// in CLOSED_POSITIONS). One row per fill: date, Opened or Added, shares, price, and an optional comment. The
+// comment is the little bubble: it shows beside the position for NOTE_DAYS after its date, and stays in the
+// ticker's history (click its slice in the allocation pie) for good.
+// Rows up to 2026-09-09 were rebuilt from the repo's own history, not typed from order screenshots: the date
+// is the day the position was updated here, an Opened price is the entry price, and an Added price is
+// back-solved from the change in the blended entry price. Each set, together with the sales in
+// CLOSED_POSITIONS, replays to the current size and entry.
+const TRADE_LOG = {
+  INTC: [
+    { date: '2026-08-17', kind: 'Opened', qty: 176.28, price: 102.16 },
+    { date: '2026-08-28', kind: 'Added', qty: 10, price: 91.54 },
+  ],
+  NBIS: [
+    { date: '2026-08-03', kind: 'Opened', qty: 78.77, price: 185.5 },
+    { date: '2026-08-28', kind: 'Added', qty: 9, price: 210.97 },
+    { date: '2026-09-08', kind: 'Added', qty: 52.57, price: 239.41 },
+  ],
+  AAOI: [{ date: '2026-09-09', kind: 'Opened', qty: 136.64, price: 111.21 }],
+  MU: [
+    { date: '2026-08-03', kind: 'Opened', qty: 24.3, price: 783.26 },
+    { date: '2026-09-09', kind: 'Opened', qty: 21.48, price: 1011.6 },
+    {
+      date: '2026-10-07', kind: 'Added', qty: 2.15, price: 1087.0,
+      comment: 'Added 2.15 shares ($2,337) ahead of Samsung’s early Q3 figures on Thu 8 Oct, where the tone on memory prices and margins matters most for MU.',
+    },
+  ],
+  CIEN: [{ date: '2026-08-17', kind: 'Opened', qty: 40.42, price: 429.61 }],
+  SNDK: [
+    { date: '2026-09-21', kind: 'Opened', qty: 5.77, price: 1780.99 },
+    { date: '2026-10-06', kind: 'Added', qty: 0.59, price: 1676.5 },
+    {
+      date: '2026-10-07', kind: 'Added', qty: 2.37, price: 1724.08,
+      comment: 'Added 2.37 shares ($4,086) for the same Samsung read on Thu 8 Oct, as memory pricing and margins drive SanDisk too.',
+    },
+  ],
+  META: [{ date: '2026-09-21', kind: 'Opened', qty: 12.06, price: 708.13 }],
+  MRVL: [
+    { date: '2026-08-03', kind: 'Opened', qty: 79.97, price: 181.3 },
+    { date: '2026-08-28', kind: 'Opened', qty: 70, price: 222.5 },
+    { date: '2026-10-02', kind: 'Opened', qty: 27.34, price: 272.42 },
+  ],
+  LITE: [
+    { date: '2026-08-03', kind: 'Opened', qty: 15.4, price: 687.06 },
+    { date: '2026-10-06', kind: 'Opened', qty: 7.16, price: 1117.08 },
+  ],
 };
 
 function activeNote(ticker) {
-  const note = POSITION_NOTES[ticker];
-  if (!note) return null;
-  const ageDays = (Date.now() - new Date(`${note.date}T12:00:00Z`).getTime()) / 86400000;
+  const latest = (TRADE_LOG[ticker] || [])
+    .filter((t) => t.comment)
+    .sort((x, y) => new Date(y.date) - new Date(x.date))[0];
+  if (!latest) return null;
+  const ageDays = (Date.now() - new Date(`${latest.date}T12:00:00Z`).getTime()) / 86400000;
   if (ageDays > NOTE_DAYS) return null;
-  return { text: note.text, dateLabel: formatClosedDate(note.date) };
+  return { text: latest.comment, dateLabel: formatClosedDate(latest.date) };
 }
 
 // A note on an open position leads with the date the change was made. A closed position already shows its
@@ -726,6 +780,7 @@ const PIE_DEPTH = 12; // thickness of the pie's edge in px
 
 let pieState = null;
 let pieHover = null;
+let pieSelected = null; // ticker whose history panel is open
 let pieSignature = null;
 
 function layoutPie(positions, width, height, ctx) {
@@ -962,12 +1017,22 @@ function pieIndexAt(x, y) {
   return i === -1 ? null : i;
 }
 
+// The slice to emphasise: the one under the cursor, else the one whose history is open.
+function pieHighlight() {
+  if (pieHover != null) return pieHover;
+  if (!pieSelected || !pieState) return null;
+  const i = pieState.positions.findIndex((p) => p.ticker === pieSelected);
+  return i === -1 ? null : i;
+}
+
 function setPieHover(index, x, y) {
   if (!pieState) return;
   if (index !== pieHover) {
     pieHover = index;
-    drawPie(pieState.positions, index);
+    drawPie(pieState.positions, pieHighlight());
   }
+  const canvas = document.getElementById('pie');
+  if (canvas) canvas.style.cursor = index != null ? 'pointer' : '';
 
   const tooltip = document.getElementById('pieTooltip');
   if (!tooltip) return;
@@ -1008,7 +1073,8 @@ function renderPie(positions) {
   pieHover = null;
   const tooltip = document.getElementById('pieTooltip');
   if (tooltip) tooltip.style.opacity = '0';
-  drawPie(positions, null);
+  const selected = pieSelected ? positions.findIndex((p) => p.ticker === pieSelected) : -1;
+  drawPie(positions, selected === -1 ? null : selected);
 }
 
 function attachPieInteractivity() {
@@ -1024,12 +1090,243 @@ function attachPieInteractivity() {
 
   canvas.addEventListener('mouseleave', () => setPieHover(null));
 
+  // Clicking a slice opens that ticker's trade history under the pie; clicking it again closes it.
+  canvas.addEventListener('click', (e) => {
+    if (!pieState) return;
+    const rect = canvas.getBoundingClientRect();
+    const index = pieIndexAt(e.clientX - rect.left, e.clientY - rect.top);
+    if (index == null) return;
+    const ticker = pieState.positions[index].ticker;
+    if (ticker === pieSelected) closeHistory();
+    else openHistory(ticker);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && pieSelected) closeHistory();
+  });
+  ['wheel', 'touchstart'].forEach((type) =>
+    window.addEventListener(type, () => cancelAnimationFrame(historyScrollFrame), { passive: true })
+  );
+
   // Ticker widths decide what fits inside a slice, so redraw once the web font is in.
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(() => {
-      if (pieState) drawPie(pieState.positions, pieHover);
+      if (pieState) drawPie(pieState.positions, pieHighlight());
     });
   }
+}
+
+// --- Ticker history (click a slice in the pie) ---
+// Opens under the pie with everything on record for that ticker: each buy and sell with its date, the P&L
+// of the sells, and the comments that went with them. Buys come from TRADE_LOG, sells from CLOSED_POSITIONS,
+// so there is nothing extra to maintain. The three figures at the top follow the live prices.
+let lastPositions = [];
+let lastApiEntryValue = null;
+let historyEls = null;
+
+const fmtQty = (q) => String(+q.toFixed(2));
+const fmtPrice = (p) => '$' + p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtSignedUsd = (n) => `${n >= 0 ? '+' : ''}${formatCurrency(n)}`;
+const fmtSignedPct = (n) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
+
+// The open position's size, backed out of its weight (entry price x quantity over total entry value).
+function openPosition(ticker) {
+  const p = lastPositions.find((x) => x.ticker === ticker);
+  if (!p || !lastApiEntryValue) return null;
+  const qty = ((p.weight / 100) * lastApiEntryValue) / p.entryPrice;
+  return { p, qty, unrealized: qty * (p.currentPrice - p.entryPrice) };
+}
+
+function historyEvents(ticker) {
+  const events = [];
+  CLOSED_POSITIONS.filter((pos) => pos.ticker === ticker).forEach((pos) => {
+    const { soldQty, gainPct, gainUsd } = computeClosedSummary(pos);
+    const soldValue = pos.sells.reduce((sum, x) => sum + x.qty * x.price, 0);
+    const boughtQty = pos.buys.reduce((sum, x) => sum + x.qty, 0);
+    const boughtValue = pos.buys.reduce((sum, x) => sum + x.qty * x.price, 0);
+    events.push({
+      date: pos.date,
+      title: `${pos.status} · ${fmtQty(soldQty)} sh`,
+      sub: `sold at ${fmtPrice(soldValue / soldQty)}, bought at ${fmtPrice(boughtValue / boughtQty)}`,
+      result: { pct: gainPct, usd: gainUsd },
+      comment: pos.note,
+    });
+  });
+  (TRADE_LOG[ticker] || []).forEach((t) => {
+    events.push({
+      date: t.date,
+      title: `${t.kind} · ${fmtQty(t.qty)} sh`,
+      sub: t.price == null ? 'sale price not recorded' : `at ${fmtPrice(t.price)} (${formatCurrency(t.qty * t.price)})`,
+      comment: t.comment,
+    });
+  });
+  return events.sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
+function historyStat(label) {
+  const box = document.createElement('div');
+  box.className = 'history-stat';
+  const l = document.createElement('span');
+  l.className = 'history-stat-label';
+  l.textContent = label;
+  const v = document.createElement('span');
+  v.className = 'history-stat-value';
+  box.appendChild(l);
+  box.appendChild(v);
+  return { box, value: v };
+}
+
+function setStat(el, usd) {
+  el.textContent = usd == null ? '—' : fmtSignedUsd(usd);
+  el.classList.toggle('negative', usd != null && usd < 0);
+  el.classList.toggle('none', usd == null);
+}
+
+// The three figures, from the live prices. Called on open and on every refresh.
+function refreshHistory() {
+  if (!historyEls || !pieSelected) return;
+  const open = openPosition(pieSelected);
+  if (!open) {
+    closeHistory();
+    return;
+  }
+  const realized = CLOSED_POSITIONS.filter((pos) => pos.ticker === pieSelected).reduce(
+    (sum, pos) => sum + computeClosedSummary(pos).gainUsd,
+    0
+  );
+  const hasRealized = CLOSED_POSITIONS.some((pos) => pos.ticker === pieSelected);
+  setStat(historyEls.realized, hasRealized ? realized : null);
+  setStat(historyEls.open, open.unrealized);
+  setStat(historyEls.net, realized + open.unrealized);
+  historyEls.holding.textContent = `Holding ${fmtQty(open.qty)} sh at ${fmtPrice(open.p.entryPrice)} · now ${fmtPrice(open.p.currentPrice)}`;
+}
+
+function openHistory(ticker) {
+  const panel = document.getElementById('tickerHistory');
+  const inner = document.getElementById('tickerHistoryInner');
+  const open = openPosition(ticker);
+  if (!panel || !inner || !open) return;
+
+  pieSelected = ticker;
+  inner.innerHTML = '';
+  const card = document.createElement('div');
+  card.className = 'history-card';
+
+  const head = document.createElement('div');
+  head.className = 'history-head';
+  const title = document.createElement('div');
+  title.className = 'history-title';
+  const link = document.createElement('a');
+  link.className = 'history-ticker';
+  link.href = `https://finance.yahoo.com/quote/${ticker}`;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = ticker;
+  const name = document.createElement('span');
+  name.className = 'history-name';
+  name.textContent = open.p.name || '';
+  title.appendChild(link);
+  title.appendChild(name);
+  const close = document.createElement('button');
+  close.className = 'history-close';
+  close.type = 'button';
+  close.setAttribute('aria-label', 'Close history');
+  close.textContent = '×';
+  close.addEventListener('click', closeHistory);
+  head.appendChild(title);
+  head.appendChild(close);
+
+  const holding = document.createElement('div');
+  holding.className = 'history-holding';
+
+  const stats = document.createElement('div');
+  stats.className = 'history-stats';
+  const realized = historyStat('Realized');
+  const openStat = historyStat('Open');
+  const net = historyStat('Net P&L');
+  net.box.classList.add('net');
+  [realized, openStat, net].forEach((x) => stats.appendChild(x.box));
+
+  const list = document.createElement('ul');
+  list.className = 'history-list';
+  const events = historyEvents(ticker);
+  events.forEach((ev) => {
+    const li = document.createElement('li');
+    const date = document.createElement('span');
+    date.className = 'history-date';
+    date.textContent = formatClosedDate(ev.date);
+    const main = document.createElement('span');
+    main.className = 'history-main';
+    const t = document.createElement('span');
+    t.className = 'history-event';
+    t.textContent = ev.title;
+    const sub = document.createElement('span');
+    sub.className = 'history-sub';
+    sub.textContent = ev.sub;
+    main.appendChild(t);
+    main.appendChild(sub);
+    li.appendChild(date);
+    li.appendChild(main);
+    if (ev.result) {
+      const res = document.createElement('span');
+      res.className = 'history-result';
+      res.classList.toggle('negative', ev.result.pct < 0);
+      res.innerHTML = `${fmtSignedPct(ev.result.pct)} <span class="closed-usd">(${fmtSignedUsd(ev.result.usd)})</span>`;
+      li.appendChild(res);
+    }
+    if (ev.comment) {
+      const bubble = buildNote(ev.comment);
+      bubble.classList.remove('note-wait');
+      bubble.classList.add('history-note');
+      li.appendChild(bubble);
+    }
+    list.appendChild(li);
+  });
+  card.append(head, holding, stats);
+  if (events.length > 0) card.appendChild(list);
+
+  inner.appendChild(card);
+  [...card.querySelectorAll('.history-head, .history-holding, .history-stats, .history-list > li')].forEach((el, i) => {
+    el.style.setProperty('--d', `${120 + i * 50}ms`);
+  });
+  historyEls = { realized: realized.value, open: openStat.value, net: net.value, holding };
+  refreshHistory();
+
+  panel.classList.add('open');
+  if (pieState) drawPie(pieState.positions, pieHighlight());
+  scrollHistoryIntoView(card);
+}
+
+// Brings the whole card into view as it opens. The page grows while the card opens, so the scroll steps
+// along with it rather than jumping once to a spot that is not there yet. A manual scroll cancels it.
+let historyScrollFrame = null;
+
+function scrollHistoryIntoView(card) {
+  const margin = 20;
+  const rect = card.getBoundingClientRect();
+  const delta = Math.min(rect.bottom - (window.innerHeight - margin), rect.top - margin);
+  if (!(delta > 4)) return;
+  const from = window.scrollY;
+  const to = from + delta;
+  cancelAnimationFrame(historyScrollFrame);
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    window.scrollTo(0, to);
+    return;
+  }
+  const start = performance.now();
+  const step = (now) => {
+    const t = Math.min(1, (now - start) / 600);
+    window.scrollTo(0, from + (to - from) * (1 - Math.pow(1 - t, 3)));
+    if (t < 1) historyScrollFrame = requestAnimationFrame(step);
+  };
+  historyScrollFrame = requestAnimationFrame(step);
+}
+
+function closeHistory() {
+  pieSelected = null;
+  historyEls = null;
+  const panel = document.getElementById('tickerHistory');
+  if (panel) panel.classList.remove('open');
+  if (pieState) drawPie(pieState.positions, pieHighlight());
 }
 
 // --- Benchmarks and alpha ---
@@ -1261,6 +1558,8 @@ async function init() {
       list.appendChild(li);
     });
 
+    lastPositions = data.positions;
+    lastApiEntryValue = data.entryValue;
     renderMovers(data.positions);
 
     try {
@@ -1273,6 +1572,12 @@ async function init() {
       renderPie(data.positions);
     } catch (pieErr) {
       console.error(pieErr);
+    }
+
+    try {
+      refreshHistory();
+    } catch (histErr) {
+      console.error(histErr);
     }
 
     try {
