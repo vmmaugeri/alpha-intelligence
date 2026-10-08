@@ -1918,7 +1918,7 @@ function closeHistory() {
 //   m      the market status shows how long until the market opens or closes
 //   t      glides back to the top
 //   g      the headline tints sage or rust for a second, by whether today is up or down
-//   p      the pie melts like lava and sets again (p again stops it)
+//   l      the pie melts like lava and sets again (l again stops it)
 //   alpha  the alpha figures pulse     worth  the subtitle whispers     best  the best closed trade is outlined
 const QUIRK_WORDS = ['alpha', 'worth', 'best'];
 let quirkTyped = '';
@@ -1977,9 +1977,8 @@ function quirkTint() {
 let meltFrame = null;
 function quirkMelt() {
   const canvas = document.getElementById('pie');
-  const blur = document.getElementById('meltBlur');
   const section = document.getElementById('allocation');
-  if (!canvas || !blur || !section || section.hidden || replay || quirkReduce()) return;
+  if (!canvas || !section || section.hidden || replay || quirkReduce()) return;
   if (meltFrame) {
     cancelAnimationFrame(meltFrame);
     meltFrame = null;
@@ -1991,11 +1990,12 @@ function quirkMelt() {
   canvas.style.filter = 'url(#melt)';
   const step = (now) => {
     const p = Math.min(1, (now - t0) / total);
-    // Ease in and out, and bring the threshold in with the blur (identity at both ends), so the pie never pops.
-    const env = Math.sin(Math.PI * p) ** 1.4;
-    document.getElementById('meltGrow').setAttribute('radius', (4 * env).toFixed(2));
-    blur.setAttribute('stdDeviation', (0.01 + 5 * env * env).toFixed(2));
-    document.getElementById('meltMatrix').setAttribute('values', `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 ${(1 + 19 * env).toFixed(2)} ${(-8 * env).toFixed(2)}`);
+    // Ease in and out. Slow noise pushes every line of the pie around, so the outlines wobble and flow like lava
+    // while staying thin. At both ends the push is zero, so the pie never pops.
+    const env = Math.sin(Math.PI * p) ** 1.2;
+    const tt = now / 1000;
+    document.getElementById('meltNoise').setAttribute('baseFrequency', `${(0.009 + 0.003 * Math.sin(tt * 1.3)).toFixed(4)} ${(0.013 + 0.004 * Math.sin(tt * 0.9 + 1)).toFixed(4)}`);
+    document.getElementById('meltDisp').setAttribute('scale', (46 * env).toFixed(2));
     if (p < 1) meltFrame = requestAnimationFrame(step);
     else {
       meltFrame = null;
@@ -2037,7 +2037,7 @@ function quirkBest() {
       best = li;
     }
   });
-  flashClass(best, 'best-glow', 2400);
+  if (best) flashClass(best.querySelector('.closed-change'), 'pulse', 1400);
 }
 
 // Returns true when the key belongs to a word being typed, so single-key shortcuts such as r, t and p stay quiet
@@ -2074,7 +2074,7 @@ window.addEventListener('blur', () => quirkMarket(false));
 // No hint anywhere on the page. None of them scrolls the page or jumps anywhere.
 //   d          switch dark and light
 //   r          replay the portfolio (again, or Esc, stops it)
-//   m t g p    and the words alpha, worth, best: see "Little shortcut quirks" above
+//   m t g l    and the words alpha, worth, best: see "Little shortcut quirks" above
 //   up up down down left right left right a i   the Konami code: a meteor shower (dark mode only)
 // The arrow keys do nothing else, so they keep scrolling the page as normal.
 document.addEventListener('keydown', (e) => {
@@ -2100,7 +2100,7 @@ document.addEventListener('keydown', (e) => {
   if (typed === 'm') quirkMarket(true);
   else if (typed === 't') scrollPageTo(0);
   else if (typed === 'g') quirkTint();
-  else if (typed === 'p') quirkMelt();
+  else if (typed === 'l') quirkMelt();
 
   if (e.key === 'd' || e.key === 'D') {
     if (e.repeat) return;
