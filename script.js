@@ -1933,9 +1933,15 @@ function flashClass(el, cls, ms) {
   setTimeout(() => el.classList.remove(cls), ms);
 }
 
-function quirkMarket() {
+// Held, not toggled: the countdown shows while m is down and the status comes back the moment it is released.
+function quirkMarket(on) {
   const text = document.getElementById('marketStatusText');
   if (!text) return;
+  if (!on) {
+    statusPeekUntil = 0;
+    updateMarketStatus();
+    return;
+  }
   const open = isMarketOpen();
   let mins = 0;
   for (let i = 1; i <= 60 * 24 * 6; i++) {
@@ -1950,8 +1956,7 @@ function quirkMarket() {
   const m = mins % 60;
   const span = d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}m`;
   text.textContent = `${open ? 'Closes' : 'Opens'} in ${span}`;
-  statusPeekUntil = performance.now() + 4000;
-  setTimeout(updateMarketStatus, 4050);
+  statusPeekUntil = Infinity;
 }
 
 function quirkTint() {
@@ -1982,15 +1987,15 @@ function quirkMelt() {
     return;
   }
   const t0 = performance.now();
-  const total = 8000;
+  const total = 4200;
   canvas.style.filter = 'url(#melt)';
   const step = (now) => {
     const p = Math.min(1, (now - t0) / total);
-    const env = Math.sin(Math.PI * p);
-    // The lines thicken first so the blur has something to merge, then the threshold in the filter rounds the
-    // result off into blobs that flow into each other.
+    // Ease in and out, and bring the threshold in with the blur (identity at both ends), so the pie never pops.
+    const env = Math.sin(Math.PI * p) ** 1.4;
     document.getElementById('meltGrow').setAttribute('radius', (4 * env).toFixed(2));
-    blur.setAttribute('stdDeviation', (1 + 5 * env * env).toFixed(2));
+    blur.setAttribute('stdDeviation', (0.01 + 5 * env * env).toFixed(2));
+    document.getElementById('meltMatrix').setAttribute('values', `1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 ${(1 + 19 * env).toFixed(2)} ${(-8 * env).toFixed(2)}`);
     if (p < 1) meltFrame = requestAnimationFrame(step);
     else {
       meltFrame = null;
@@ -2014,12 +2019,12 @@ function quirkWorth() {
     el.textContent = 'Worth knowing.';
     el.classList.remove('whisper'); // fades the new line in
   }, 400);
-  setTimeout(() => el.classList.add('whisper'), 3400);
+  setTimeout(() => el.classList.add('whisper'), 2200);
   setTimeout(() => {
     el.textContent = original;
     el.classList.remove('whisper');
     delete el.dataset.whisper;
-  }, 3800);
+  }, 2600);
 }
 
 function quirkBest() {
@@ -2060,6 +2065,11 @@ function quirkWordTyping(key) {
   });
 }
 
+document.addEventListener('keyup', (e) => {
+  if (e.key === 'm' || e.key === 'M') quirkMarket(false);
+});
+window.addEventListener('blur', () => quirkMarket(false));
+
 // --- Hidden keyboard shortcuts ---
 // No hint anywhere on the page. None of them scrolls the page or jumps anywhere.
 //   d          switch dark and light
@@ -2087,7 +2097,7 @@ document.addEventListener('keydown', (e) => {
 
   if (e.repeat) return;
   if (quirkWordTyping(typed)) return;
-  if (typed === 'm') quirkMarket();
+  if (typed === 'm') quirkMarket(true);
   else if (typed === 't') scrollPageTo(0);
   else if (typed === 'g') quirkTint();
   else if (typed === 'p') quirkMelt();
@@ -2260,8 +2270,6 @@ function startReplay() {
   hud.className = 'replay-date';
   wrap.appendChild(hud);
 
-  // Always bring the pie into the middle of the screen first, then the replay starts.
-  const scrollMs = scrollPageTo(wrap.getBoundingClientRect().top + window.scrollY - (window.innerHeight - wrap.offsetHeight) / 2);
 
   const utc = (str) => new Date(`${str}T12:00:00Z`).getTime();
   replay = {
@@ -2276,7 +2284,7 @@ function startReplay() {
     startMs: utc(REPLAY_START_DATE),
     dateKeys,
     lastMs: utcMs(steps[last].date),
-    start: performance.now() + scrollMs + 400,
+    start: performance.now() + 400,
     frame: null,
     text: '',
     fade: { state: {}, room: {}, k: 1, kDown: 1, dt: 16 },

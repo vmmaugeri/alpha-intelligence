@@ -315,11 +315,11 @@ No hint anywhere on the page, deliberately. None of them scrolls or jumps. Ignor
 All in the "Hidden keyboard shortcuts" block of `script.js`.
 
 - `d`: switch dark and light.
-- `r`: replay (again, or Esc, stops it). It always glides the page to the pie first (`scrollPageTo`), then starts.
-- `m`: the market status shows "Opens in 17h 14m" or "Closes in ..." for 4 seconds, then goes back.
+- `r`: replay (again, or Esc, stops it). It does not scroll (a pull to the pie was tried and removed: the pie sits near the bottom so it dragged the page down).
+- `m`: **hold it**: the market status shows "Opens in 17h 14m" or "Closes in ..." while the key is down and goes back on release.
 - `t`: glides back to the top (the one shortcut that scrolls, by choice).
 - `g`: the headline value tints sage or rust for ~1.6s, by whether today is up or down against the last close of the day before.
-- `p`: the pie melts like lava for 8s (an SVG filter, `#melt` in `index.html`: lines thicken, blur, then a threshold
+- `p`: the pie melts like lava for ~4s (an SVG filter, `#melt` in `index.html`: lines thicken, blur, then a threshold
   rounds them into blobs that flow together), then sets again. `p` again stops it. Ignored during a replay and with reduced motion.
   **Valerio asked for the pie to type out Venditti's "Roma" lyrics with the recording playing. Declined on purpose:** it is a
   copyrighted song and the site and repo are public. Do not add it. If he writes lyrics that are truly his own, they can go in.
