@@ -1411,6 +1411,46 @@ function drawPie(positions, hoverIndex, insideOnly, fade) {
   const dimmed = hoverIndex != null && slices[hoverIndex] != null;
   const { ink, muted } = themeColors();
 
+  // The replay: how visible each slice's name is, and how solid its divider lines are. A slice that is too small to
+  // hold its name melts into its neighbour (faint lines) instead of showing as an empty wedge, and gains a name and
+  // solid lines together as it grows.
+  ctx.font = font;
+  ctx.textBaseline = 'alphabetic';
+  let nameDraw = null;
+  if (fade) {
+    nameDraw = labels.map((l, i) => {
+      const key = positions[i].ticker;
+      const fits = l.hidden ? 0 : l.alpha == null ? 1 : l.alpha;
+      return { key, fits, alpha: fits, x: l.tx, y: l.ty, w: ctx.measureText(key).width };
+    });
+    // If two names would touch, the one on the smaller slice steps aside until there is room.
+    for (let a = 0; a < nameDraw.length; a++) {
+      for (let b = a + 1; b < nameDraw.length; b++) {
+        const A = nameDraw[a];
+        const B = nameDraw[b];
+        if (A.alpha < 0.05 || B.alpha < 0.05) continue;
+        if (Math.abs(A.x - B.x) - (A.w + B.w) / 2 - 4 < 0 && Math.abs(A.y - B.y) - textH - 3 < 0) {
+          if (positions[a].weight < positions[b].weight) A.alpha = 0;
+          else B.alpha = 0;
+        }
+      }
+    }
+    // Ease everything over time so nothing flicks (fading out is a little quicker than fading in).
+    nameDraw.forEach((n) => {
+      const ease = (store, target) => {
+        const now = store[n.key];
+        const rate = target < (now == null ? target : now) ? fade.kDown || fade.k : fade.k;
+        const value = now == null ? target : now + (target - now) * rate;
+        store[n.key] = value;
+        return value;
+      };
+      n.alpha = ease(fade.state, n.alpha);
+      n.fits = ease(fade.room, n.fits);
+    });
+  }
+  const lineAlpha = (i) => (nameDraw && i > 0 ? Math.max(0.1, nameDraw[i].fits) : 1);
+  const baseAlpha = dimmed ? 0.45 : 1;
+
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.strokeStyle = ink;
@@ -1424,24 +1464,47 @@ function drawPie(positions, hoverIndex, insideOnly, fade) {
   ctx.lineTo(cx - R, cy + PIE_DEPTH);
   ctx.moveTo(cx + R, cy);
   ctx.lineTo(cx + R, cy + PIE_DEPTH);
-  slices.forEach((s) => {
-    if (Math.sin(s.start) > 0.02) {
+  if (!nameDraw) {
+    slices.forEach((s) => {
+      if (Math.sin(s.start) > 0.02) {
+        ctx.moveTo(rimX(s.start), rimY(s.start));
+        ctx.lineTo(rimX(s.start), rimY(s.start) + PIE_DEPTH);
+      }
+    });
+  }
+  ctx.stroke();
+  if (nameDraw) {
+    slices.forEach((s, i) => {
+      if (Math.sin(s.start) <= 0.02) return;
+      ctx.globalAlpha = baseAlpha * lineAlpha(i);
+      ctx.beginPath();
       ctx.moveTo(rimX(s.start), rimY(s.start));
       ctx.lineTo(rimX(s.start), rimY(s.start) + PIE_DEPTH);
-    }
-  });
-  ctx.stroke();
+      ctx.stroke();
+    });
+    ctx.globalAlpha = baseAlpha;
+  }
 
   // Top face: the outline and one divider per slice.
   ctx.beginPath();
   ctx.ellipse(cx, cy, R, R * k, 0, 0, Math.PI * 2);
-  if (slices.length > 1) {
+  if (slices.length > 1 && !nameDraw) {
     slices.forEach((s) => {
       ctx.moveTo(cx, cy);
       ctx.lineTo(rimX(s.start), rimY(s.start));
     });
   }
   ctx.stroke();
+  if (nameDraw && slices.length > 1) {
+    slices.forEach((s, i) => {
+      ctx.globalAlpha = baseAlpha * lineAlpha(i);
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(rimX(s.start), rimY(s.start));
+      ctx.stroke();
+    });
+    ctx.globalAlpha = baseAlpha;
+  }
 
   if (dimmed) {
     const s = slices[hoverIndex];
@@ -1455,63 +1518,17 @@ function drawPie(positions, hoverIndex, insideOnly, fade) {
     ctx.stroke();
   }
 
-  ctx.font = font;
-  ctx.textBaseline = 'alphabetic';
-  // The replay's names (see layoutPie): work out where each one is drawn and how visible it is meant to be.
-  let nameTargets = null;
-  if (fade) {
-    nameTargets = labels.map((l, i) => {
-      const key = positions[i].ticker;
-      let alpha = l.hidden ? 0 : l.alpha == null ? 1 : l.alpha;
-      // A name that swaps places with its neighbour (the pie is kept largest first) is moved smoothly: the jump is
-      // absorbed into an offset that then fades away, and the name dims while it is on its way.
-      const p = fade.pos[key] || (fade.pos[key] = { tx: l.tx, ty: l.ty, ox: 0, oy: 0 });
-      const jx = l.tx - p.tx;
-      const jy = l.ty - p.ty;
-      if (Math.hypot(jx, jy) > 24) {
-        p.ox -= jx;
-        p.oy -= jy;
-      }
-      p.tx = l.tx;
-      p.ty = l.ty;
-      const settle = Math.exp(-fade.dt / 380);
-      p.ox *= settle;
-      p.oy *= settle;
-      alpha *= Math.pow(Math.max(0, 1 - Math.hypot(p.ox, p.oy) / 46), 2);
-      return { x: l.tx + p.ox, y: l.ty + p.oy, alpha, w: ctx.measureText(key).width };
-    });
-    // If two names would touch, the one on the smaller slice (the later one, the pie being largest first) steps
-    // aside until there is room. Its fade is eased below, so it never flicks.
-    for (let a = 0; a < nameTargets.length; a++) {
-      for (let b = a + 1; b < nameTargets.length; b++) {
-        const A = nameTargets[a];
-        const B = nameTargets[b];
-        if (A.alpha < 0.05 || B.alpha < 0.05) continue;
-        if (Math.abs(A.x - B.x) - (A.w + B.w) / 2 - 4 < 0 && Math.abs(A.y - B.y) - textH - 3 < 0) B.alpha = 0;
-      }
-    }
-  }
-
   labels.forEach((l, i) => {
     let nameAlpha;
-    let nameX = l.tx;
-    let nameY = l.ty;
-    if (nameTargets) {
-      const t = nameTargets[i];
-      const key = positions[i].ticker;
-      nameX = t.x;
-      nameY = t.y;
-      // a name eases toward being shown or hidden, so it can never flick on or off
-      const now = fade.state[key];
-      // (fading out is quicker than fading in, so a name that has to step aside is gone before its neighbour arrives)
-      const rate = t.alpha < (now == null ? t.alpha : now) ? fade.kDown || fade.k : fade.k;
-      nameAlpha = now == null ? t.alpha : now + (t.alpha - now) * rate;
-      fade.state[key] = nameAlpha;
+    if (nameDraw) {
+      nameAlpha = nameDraw[i].alpha;
       if (nameAlpha < 0.01) return;
     } else {
       if (l.hidden) return;
       nameAlpha = l.alpha == null ? 1 : l.alpha;
     }
+    const nameX = l.tx;
+    const nameY = l.ty;
     ctx.globalAlpha = (dimmed && i !== hoverIndex ? 0.45 : 1) * nameAlpha;
     if (!l.inside) {
       ctx.strokeStyle = muted;
@@ -2108,12 +2125,9 @@ const replayEase = (p) => p * p * (3 - 2 * p); // gentle: half the peak speed of
 const replayClamp = (v) => Math.max(0, Math.min(1, v));
 
 function replayPositions(weightsAt, order) {
-  // largest first, like the real pie, at every moment (two slices swap places exactly when they are the same size,
-  // so the edges never jump)
-  return order
-    .map((ticker) => ({ ticker, weight: Math.max(0, weightsAt(ticker)) }))
-    .filter((p) => p.weight > 0.0005)
-    .sort((a, b) => b.weight - a.weight);
+  // Slices keep their place for the whole replay (today's order, then the ones that were closed), so a name stays on
+  // its own slice and never has to move to another one.
+  return order.map((ticker) => ({ ticker, weight: Math.max(0, weightsAt(ticker)) })).filter((p) => p.weight > 0.0005);
 }
 
 // The pie moves at a constant pace measured in what the eye follows: how fast the slice edges sweep round the pie
@@ -2124,10 +2138,7 @@ function replayPositions(weightsAt, order) {
 function replayEdges(weights) {
   const total = weights.reduce((a, b) => a + b, 0) || 1;
   let run = 0;
-  return weights
-    .map((w) => (w / total) * 100)
-    .sort((a, b) => b - a)
-    .map((w) => (run += w));
+  return weights.map((w) => (run += (w / total) * 100));
 }
 
 function replayPath(curves, last) {
@@ -2204,7 +2215,7 @@ function startReplay() {
     start: performance.now() + 400,
     frame: null,
     text: '',
-    fade: { state: {}, pos: {}, k: 1, dt: 16 },
+    fade: { state: {}, room: {}, k: 1, kDown: 1, dt: 16 },
     lastNow: null,
   };
   pieHover = null;
@@ -2216,7 +2227,6 @@ function startReplay() {
 // Everything on screen at time t (ms since the replay began): the pie's weights, and the date with its opacity and blur.
 function replayState(t) {
   const R = replay;
-  const lerpWeights = (a, b, k) => (ticker) => (a[ticker] || 0) + ((b[ticker] || 0) - (a[ticker] || 0)) * k;
   const total = REPLAY_BACK_MS + REPLAY_HOLD_MS + REPLAY_PLAY_MS + REPLAY_END_MS;
   let weights;
   let date = { text: '', opacity: 0, blur: 0 };
@@ -2225,7 +2235,14 @@ function replayState(t) {
     // going back: the date ticks back fast and slows to land on Aug 1, the pie slips back with it
     const p = replayClamp(t / REPLAY_BACK_MS);
     const ease = 1 - Math.pow(1 - p, 3);
-    weights = lerpWeights(R.today, R.first, replayEase(p));
+    // Slices that are not in the first portfolio shrink away first, the new ones grow in a little later (the two
+    // overlap, so it never pauses), and the rest adjust throughout. That keeps the number of half-grown slivers low.
+    weights = (ticker) => {
+      const a = R.today[ticker] || 0;
+      const b = R.first[ticker] || 0;
+      const w = a && !b ? replayClamp(p / 0.6) : !a && b ? replayClamp((p - 0.4) / 0.6) : p;
+      return a + (b - a) * replayEase(w);
+    };
     date = {
       text: replayDayLabel(R.todayMs - (R.todayMs - R.startMs) * ease),
       opacity: replayClamp(p / 0.1),

@@ -330,13 +330,15 @@ block in `script.js`.
 
 1. A date in the top left of the pie ticks back fast from today to Aug 1, slowing to land on it (motion-blurred while
    fast, sharpening as it lands) while the pie slowly slips back to its first positions (about 4.2s, on a gentle
-   smoothstep curve; a sharper curve made names jump 13px a frame).
+   smoothstep curve; a sharper curve made names jump 13px a frame). The slices that are not in the first portfolio
+   shrink away first and the new ones grow in a little later, overlapping so it never pauses (doing all at once left ~13
+   half-grown slivers on screen).
 2. It holds on Aug 1 for 1.5s.
 3. The pie then moves at **one constant pace** through every trade up to today, about 42s, **and the date stays on
    screen the whole way, counting forward with it** (`dateKeys`). The date deliberately flies over quiet stretches and
    slows on busy trading days (it is the real calendar; the pie is what moves at a constant pace).
-   Pace is measured in **how fast the slice edges sweep round the pie** (`replayEdges`/`replayPath`), which is what the
-   eye follows, not in trading days and not in how much each slice's size changes (a change in a big slice at the front
+   Pace is measured in **how fast the slice edges sweep round the pie, in the order it is drawn** (`replayEdges`/
+   `replayPath`), which is what the eye follows, not in trading days and not in how much each slice's size changes (a change in a big slice at the front
    moves every edge behind it). The lookup from "how far along" to a position on the curves **interpolates**; it used to
    snap to a table of 1500 steps, so at 60fps the pie stood still for 2 or 3 frames and then lurched, which looked like
    speeding up and slowing down (variation was 121%, now 1.8%, with no frame standing still). Always measure pace at
@@ -352,14 +354,15 @@ block in `script.js`.
   eased over time (`fade`, about 0.35s) so a name can never flick on or off. Measured at 60fps: names move at most
   2.6px a frame and the fastest fade takes 0.43s.
 - Slices only leave the pie at a size of effectively zero (no popping at a size threshold).
-- **The pie is largest-first, clockwise from 12 o'clock, at every moment** (`replayPositions` sorts each frame), like
-  the real pie. This is smooth because two neighbouring slices swap places exactly when they are the same size, so no
-  edge ever jumps (biggest single-edge move per frame is 0.24%). Only the *names* change owner at a swap: a name that
-  jumps more than 24px is moved smoothly (an offset that decays over ~0.4s) and dims while it travels. If two names would
-  touch, the one on the smaller slice fades out (quickly, ~0.13s) until there is room, so names overlap in under 0.5%
-  of frames and never above 50% visibility.
-- `drawPie` only resizes the canvas when its size really changes (it used to reallocate it every frame, a source of
-  flicker and dropped frames). A frame costs about 0.5ms.
+- **The slice order is fixed for the whole replay** (today's holdings in today's order, then the ones closed along the
+  way), NOT sorted by size. Valerio asked for this: sorting made names flash by and jump to other slices before they could
+  be read, and forced something too complicated. Because a name stays on its own slice, names are readable for a median of
+  ~11s (it was 2s) and the order at the end is already the real pie's, so nothing jumps.
+- **A slice that cannot hold its name is drawn faintly**: its divider lines are only as solid as its name is visible
+  (`lineAlpha`, minimum 0.1), so a too-small wedge melts into its neighbour instead of showing as an empty slice, and it
+  gains a name and solid lines together as it grows. Measured: 0 slices with solid lines but no name, in every phase
+  (it was ~5 on average during the journey and ~8 during the rewind).
+- If two names would touch, the one on the smaller slice fades out (quickly, ~0.13s) until there is room.
 
 Built from `TRADE_FILLS` with the same entry-cost weights the pie uses, and every slice follows a smooth monotone curve
 through its size on each trading day (`replayCurve`). The last frame is today's real pie. Esc, or `r` again, stops it.
