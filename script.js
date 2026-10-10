@@ -2540,7 +2540,31 @@ function setMover(el, position, direction) {
   el.classList.toggle('negative', change < 0);
 }
 
+// "Today's" while a session is on or has been today. On weekends, holidays and before the open, the figures are still
+// the last session's (the quote's change since the close before it), so the labels name that day instead:
+// "Friday's Gainer".
+function moverDayName() {
+  const { weekday, date, hour, minute } = getNYParts();
+  const tradingDay = weekday !== 'Sat' && weekday !== 'Sun' && !NYSE_CLOSED.includes(date);
+  if (tradingDay && hour * 60 + minute >= 9 * 60 + 30) return "Today's";
+  const d = new Date(`${date}T12:00:00Z`);
+  for (let i = 0; i < 10; i++) {
+    d.setUTCDate(d.getUTCDate() - 1);
+    const key = d.toISOString().slice(0, 10);
+    const wd = d.getUTCDay();
+    if (wd !== 0 && wd !== 6 && !NYSE_CLOSED.includes(key)) {
+      return `${d.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' })}'s`;
+    }
+  }
+  return "Today's";
+}
+
 function renderMovers(positions) {
+  const day = moverDayName();
+  const gl = document.getElementById('gainerLabel');
+  const ll = document.getElementById('loserLabel');
+  if (gl) gl.textContent = `${day} Gainer`;
+  if (ll) ll.textContent = `${day} Loser`;
   const best = positions.length > 0 ? positions.reduce((a, b) => (b.dayChangePct > a.dayChangePct ? b : a)) : null;
   const worst = positions.length > 0 ? positions.reduce((a, b) => (b.dayChangePct < a.dayChangePct ? b : a)) : null;
   setMover(document.getElementById('gainerValue'), best, 'up');

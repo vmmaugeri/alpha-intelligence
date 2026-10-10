@@ -386,6 +386,12 @@ Valerio removed it because it looked bad while the portfolio's gain happened bef
 He wants it back once the portfolio improves. **To restore it:** `git revert` the removal commit, or look at the git
 tag `heatmap-calendar` (the last version with it). Notes are in Claude's memory too.
 
+## Gainer and loser labels
+
+The movers under the positions say "Today's Gainer / Loser" only while today's session is on or done. On weekends,
+market holidays and before the 9:30 open the quote still holds the last session's change, so `moverDayName()` relabels
+them with that day ("Friday's Gainer"), skipping weekends and `NYSE_HOLIDAYS`. Set on every refresh in `renderMovers`.
+
 ## Market clock (no bell)
 
 `isMarketOpen()` knows the NYSE holidays and the 1pm early closes for **2026 only** (`NYSE_HOLIDAYS`, a map of
