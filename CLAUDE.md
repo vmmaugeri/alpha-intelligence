@@ -168,21 +168,15 @@ touching any of it:
 
 ## Stars (easter egg)
 
-- In **dark mode while the market is closed**, a faint field of stars sits across the top of the page
-  (`#sky`, a 440px-tall canvas behind the content; code is the "Stars" block at the top of `script.js`).
-  They are thickest at the left and right edges and thin toward the middle where the title and chart are, and
-  they twinkle very gently.
-- **Arrival and exit:** the stars arrive by coming **down from above the top edge**, one after another (~3.4s in
-  all). When the market opens (checked on the 20 second refresh, with the same `isMarketOpen()` as the status
-  text, so no holiday calendar) each star **speeds up and leaves through the top of the page** and only fades in
-  its last moments (~3.4s in all). Switching to light mode fades them quickly instead, and
-  `prefers-reduced-motion` shows them still.
-- **Shooting star:** while the stars are up, one faint streak with a long tail crosses the top (about 1.9 seconds, alternating
-  from the left and right thirds, never over the middle). The first comes **30 seconds after the stars appear**,
-  then **one every 90 seconds** (`SHOOT_FIRST_MS`, `SHOOT_EVERY_MS` in `script.js`). The timer restarts if the
-  stars leave and come back. None with reduced motion. It is meant to be a secret, so do not advertise it.
-- The sky is the same every time (fixed seed) and only the star colour comes from the theme (`--ink`). Keep it
-  faint: it is meant to be found, not noticed.
+- **The stars only appear for the Konami code's meteor shower, in dark mode.** They used to sit across the top of the
+  page whenever the market was closed; Valerio dropped that on 2026-10-11 ("i dont like them anymore") and kept only the
+  code. Do not bring the always-on stars back. The sky is `#sky`, a 440px-tall canvas behind the content (the "Stars"
+  block at the top of `script.js`); `updateSky` only wants it up while `skyForcedUntil` is in the future.
+- They come down from above the top edge one after another, the meteors cross, then the stars leave upward through
+  the top (~3.4s each way). Switching to light mode fades them quickly, and `prefers-reduced-motion` skips the show.
+- The old periodic shooting star (`SHOOT_FIRST_MS`, `SHOOT_EVERY_MS`) is still in the code but never fires in
+  practice now, since the stars are only up for the 13 seconds of the shower.
+- The sky is the same every time (fixed seed) and only the star colour comes from the theme (`--ink`).
 
 ## Light / dark theme
 
@@ -329,7 +323,7 @@ All in the "Hidden keyboard shortcuts" block of `script.js`.
   "Worth knowing." and back, `best` pulses the percentage of the best of the 3 shown closed trades (like `alpha`). While a word is being typed, `r`, `t` and `l`
   stay quiet (`quirkWordTyping`), so typing "worth" does not start a replay. Code is the "Little shortcut quirks" block.
 - **Konami code** (↑ ↑ ↓ ↓ ← → ← → **A I**, for Alpha Intelligence, changed from B A on 2026-10-08): a meteor shower, about 10 seconds of shooting stars, dark mode only (in light mode
-  nothing happens, on purpose). The page first glides to the top (the sky is there) and the shower starts once it arrives, so it is always seen in full. If the stars are not up (market open) they come down for it and leave afterwards. A held
+  nothing happens, on purpose). The page first glides to the top (the sky is there) and the shower starts once it arrives, so it is always seen in full. The stars come down for the show and leave afterwards. A held
   key (key repeat) is ignored so it cannot break the code.
 - The arrow keys do nothing else, so they scroll the page as normal. **Removed on 2026-10-08 at Valerio's request:**
   left/right stepping the chart range and up/down flipping tickers on the pie card. Do not bring them back.
@@ -396,7 +390,7 @@ them with that day ("Friday's Gainer"), skipping weekends and `NYSE_HOLIDAYS`. S
 
 `isMarketOpen()` knows the NYSE holidays and the 1pm early closes for **2026 only** (`NYSE_HOLIDAYS`, a map of
 date to name, plus `NYSE_EARLY_CLOSE`, at the top of the market-status code; `NYSE_CLOSED` is derived from the map).
-**Add 2027's before 2027 starts.** A one-second watcher keeps the status label and the stars exact: they change on the
+**Add 2027's before 2027 starts.** A one-second watcher keeps the status label exact: it changes on the
 exact second the market opens or closes, not up to 20s late on the refresh.
 **There is no bell** (no ring on the status dot, no label animation): Valerio asked for it to be removed twice.
 **Known gap:** the server (`api/quotes.js` and `api/cron-update.js`) does not know about holidays, so it logs flat

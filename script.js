@@ -1,7 +1,8 @@
 // --- Stars (easter egg) ---
-// In dark mode while the market is closed, a faint field of stars across the top of the page: thickest at the
+// Only shown for the Konami code's meteor shower, in dark mode (they used to sit up whenever the market was
+// closed; Valerio dropped that on 2026-10-11). A faint field of stars across the top of the page: thickest at the
 // left and right edges, thinning out toward the middle where the title and chart are, twinkling very gently.
-// They arrive by coming down from above the top edge, one after another, and at market open each one climbs
+// They arrive by coming down from above the top edge, one after another, and when the shower ends each one climbs
 // back up and out through the top of the page. Switching to light mode just fades them quickly.
 const SKY_HEIGHT = 440;
 let skyItems = [];
@@ -161,7 +162,7 @@ function startShower() {
   clearTimeout(showerTimer);
   showerTimer = setTimeout(() => {
     skyForcedUntil = 0;
-    updateSky(false); // leaves again if the market is open
+    updateSky(false); // the stars leave upward
   }, 13000 + lift);
 }
 
@@ -260,7 +261,7 @@ function setSky(state, fast) {
 function updateSky(fast) {
   if (!document.getElementById('sky')) return;
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  const want = dark && (performance.now() < skyForcedUntil || !isMarketOpen());
+  const want = dark && performance.now() < skyForcedUntil; // only the Konami shower brings the stars up
   if (want && (skyState === 'off' || skyState === 'out')) setSky('in');
   else if (!want && (skyState === 'on' || skyState === 'in')) setSky('out', fast);
 }
