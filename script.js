@@ -526,6 +526,50 @@ function niceTicks(min, max, targetCount) {
   return ticks;
 }
 
+// Where a point sits along the chart's x axis, in trading minutes since the Aug 3 open. Overnight, weekends and
+// holidays take no room (as before), but a day's worth of time takes a day's worth of width whether it holds
+// 80 logged points or a single daily close. Spacing by point count squeezed the 8 early daily closes into a sliver.
+const CHART_SESSION_MIN = 390;
+const chartClock = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: 'numeric',
+  minute: 'numeric',
+  hour12: false,
+});
+const chartTradingDays = (() => {
+  const days = new Map();
+  const d = new Date('2026-08-03T12:00:00Z');
+  let n = 0;
+  for (let i = 0; i < 800; i++, d.setUTCDate(d.getUTCDate() + 1)) {
+    const wd = d.getUTCDay();
+    const key = d.toISOString().slice(0, 10);
+    if (wd !== 0 && wd !== 6 && !NYSE_CLOSED.includes(key)) days.set(key, n++);
+    else days.set(key, n - 0.0001); // a non-trading day sits at the end of the session before it
+  }
+  return days;
+})();
+const chartPosCache = new WeakMap();
+
+function chartMarketPos(point) {
+  const cached = chartPosCache.get(point);
+  if (cached !== undefined) return cached;
+  const map = {};
+  chartClock.formatToParts(new Date(point.t)).forEach((p) => (map[p.type] = p.value));
+  const day = chartTradingDays.get(`${map.year}-${map.month}-${map.day}`);
+  let pos;
+  if (day === undefined || day < 0) pos = 0;
+  else {
+    const mins = (parseInt(map.hour, 10) % 24) * 60 + parseInt(map.minute, 10) - (9 * 60 + 30);
+    pos = Math.floor(day) * CHART_SESSION_MIN + Math.max(0, Math.min(CHART_SESSION_MIN, mins));
+    if (day !== Math.floor(day)) pos = Math.ceil(day) * CHART_SESSION_MIN; // closed day: end of the last session
+  }
+  chartPosCache.set(point, pos);
+  return pos;
+}
+
 function drawChart(history, entryValue, hoverIndex) {
   const canvas = document.getElementById('chart');
   const ctx = canvas.getContext('2d');
@@ -566,8 +610,14 @@ function drawChart(history, entryValue, hoverIndex) {
   const max = ticks[ticks.length - 1];
   const range = max - min || 1;
 
-  const xFor = (i) =>
-    history.length === 1 ? padLeft + plotW / 2 : padLeft + (i / (history.length - 1)) * plotW;
+  const posFirst = chartMarketPos(history[0]);
+  const posSpan = chartMarketPos(history[history.length - 1]) - posFirst;
+  const xFor = (i) => {
+    if (history.length === 1) return padLeft + plotW / 2;
+    // By trading time; by point count if the points do not span any time at all.
+    const frac = posSpan > 0 ? (chartMarketPos(history[i]) - posFirst) / posSpan : i / (history.length - 1);
+    return padLeft + frac * plotW;
+  };
   const yFor = (v) => padTop + plotH - ((v - min) / range) * plotH;
 
   const points = history.map((h, i) => [xFor(i), yFor(h.value)]);

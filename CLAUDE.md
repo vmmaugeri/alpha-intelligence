@@ -100,6 +100,11 @@ touching any of it:
   ticker's real daily close from stockanalysis.com; they matched the old hand-researched values to the cent except
   Aug 4 and Aug 5 (BRUN close off by 2 and 1 cents, now corrected). The +12.1% jump on Aug 12 is real (NBIS +34%).
   The on-page disclaimer says all this, so if you change the cutoff, update the disclaimer text too.
+- **The chart's x axis is trading time, not point count** (`chartMarketPos` in `script.js`: trading minutes since the Aug 3
+  open, 390 per session, overnight, weekends and holidays take no room). It used to be point count, which squeezed the
+  8 daily closes before Aug 12 into a vertical sliver next to ~4,000 intraday points (found on 2026-10-12). Each
+  session gets equal width, so the early daily part is about 16% of the "All" range. This relies on points only being
+  logged in market hours, which the logger already guarantees.
 - `HISTORY_KEY = 'alpha-intelligence-history-v6'` is the current live-writing
   key.
 - `RECOVERY_KEY = 'alpha-intelligence-history-v2'` holds 1,933 **real**
