@@ -26,6 +26,8 @@ const MIN_INTERVAL_MS = 55 * 1000;
 const MAX_PLAUSIBLE_SWING = 0.08;
 const ORIGIN_TIMESTAMP = '2026-08-01T00:00:00Z';
 
+// From here on the chart shows the logged intraday points. Before it, the chart shows one clean point per trading
+// day (the closes in PORTFOLIO_HISTORICAL_CLOSES, from the Aug 1 origin), because the early logging had bugs.
 const DISPLAY_START_TIMESTAMP = '2026-08-12T19:45:00Z'; // Aug 12, 3:45pm ET
 
 const TRUE_ORIGIN_VALUE = 100003.31;
@@ -43,8 +45,8 @@ const BENCHMARKS = [
 const PORTFOLIO_HISTORICAL_CLOSES = [
   { t: '2026-08-01T00:00:00Z', value: 100003.31 },
   { t: '2026-08-03T20:00:00Z', value: 109333.05 },
-  { t: '2026-08-04T20:00:00Z', value: 116158.31 },
-  { t: '2026-08-05T20:00:00Z', value: 112848.92 },
+  { t: '2026-08-04T20:00:00Z', value: 116172.19 },
+  { t: '2026-08-05T20:00:00Z', value: 112855.86 },
   { t: '2026-08-06T20:00:00Z', value: 108925.21 },
   { t: '2026-08-07T20:00:00Z', value: 113820.80 },
   { t: '2026-08-10T20:00:00Z', value: 107356.39 },
@@ -217,6 +219,9 @@ module.exports = async (req, res) => {
 
     const displayStartTime = new Date(DISPLAY_START_TIMESTAMP).getTime();
     history = history.filter((p) => new Date(p.t).getTime() >= displayStartTime);
+    // Before that, the daily closes: shares from the Aug 3 fills times each ticker's real close (checked 2026-10-12).
+    const earlyCloses = PORTFOLIO_HISTORICAL_CLOSES.filter((p) => new Date(p.t).getTime() < displayStartTime);
+    history = [...earlyCloses, ...history];
 
     const positions = quotes
       .map((p) => ({

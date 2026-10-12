@@ -92,10 +92,14 @@ touching any of it:
 - `ENTRY_VALUE` (computed fresh from current `POSITIONS`) is a **different
   number** — today's holdings' cost basis, used only for weight% math. Never
   use it as a stand-in for the true origin.
-- `DISPLAY_START_TIMESTAMP` cuts the visible chart to start Aug 12, 3:45pm
-  ET. Everything before that had real data-quality problems from early
-  logging bugs. The on-page disclaimer explains this to visitors — if you
-  ever change this cutoff, update the disclaimer text too.
+- `DISPLAY_START_TIMESTAMP` (Aug 12, 3:45pm ET) is where the **logged intraday points** start. Everything logged
+  before that had real data-quality problems from early logging bugs, so those points are dropped. **Before it, the
+  chart shows one clean point per trading day** (the Aug 1 origin and the closes in `PORTFOLIO_HISTORICAL_CLOSES`
+  up to Aug 11), prepended in the handler. Those closes were re-derived on 2026-10-12 as the Aug 3 fill share counts
+  (MU, NBIS, MRVL, LITE, IREN, AXTI, DRAM, BRUN: the portfolio was exactly these 8 until the Aug 14 trades) times each
+  ticker's real daily close from stockanalysis.com; they matched the old hand-researched values to the cent except
+  Aug 4 and Aug 5 (BRUN close off by 2 and 1 cents, now corrected). The +12.1% jump on Aug 12 is real (NBIS +34%).
+  The on-page disclaimer says all this, so if you change the cutoff, update the disclaimer text too.
 - `HISTORY_KEY = 'alpha-intelligence-history-v6'` is the current live-writing
   key.
 - `RECOVERY_KEY = 'alpha-intelligence-history-v2'` holds 1,933 **real**
