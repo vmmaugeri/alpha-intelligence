@@ -6,16 +6,19 @@
 // pinger instead; this route is a normal HTTP endpoint either way.
 
 const POSITIONS = [
-  { ticker: 'INTC', quantity: 186.28, entryPrice: 101.59 },
-  { ticker: 'NBIS', quantity: 82.44,  entryPrice: 208.63 },
-  { ticker: 'AAOI', quantity: 136.64, entryPrice: 111.21 },
-  { ticker: 'MU',   quantity: 23.63,  entryPrice: 1018.46 },
+  { ticker: 'INTC', quantity: 102.20, entryPrice: 101.59 },
+  { ticker: 'NBIS', quantity: 54.87,  entryPrice: 208.63 },
+  { ticker: 'AAOI', quantity: 95.73, entryPrice: 111.21 },
+  { ticker: 'MU',   quantity: 12.80,  entryPrice: 1018.46 },
   { ticker: 'CIEN', quantity: 24.42,  entryPrice: 429.61 },
-  { ticker: 'SNDK', quantity: 8.73,   entryPrice: 1758.48 },
+  { ticker: 'SNDK', quantity: 6.37,   entryPrice: 1758.48 },
   { ticker: 'META', quantity: 12.06,  entryPrice: 708.13 },
   { ticker: 'MRVL', quantity: 27.34,  entryPrice: 272.42 },
-  { ticker: 'LITE', quantity: 7.16,   entryPrice: 1117.08 },
+  { ticker: 'LITE', quantity: 4.67,   entryPrice: 1117.08 },
 ];
+
+// Cash from the Oct 15 sales. Must match CASH in api/quotes.js.
+const CASH = 31629.23;
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -95,7 +98,7 @@ module.exports = async (req, res) => {
       })
     );
 
-    const currentValue = POSITIONS.reduce((sum, p, i) => sum + p.quantity * prices[i], 0);
+    const currentValue = POSITIONS.reduce((sum, p, i) => sum + p.quantity * prices[i], 0) + CASH;
 
     if (!isMarketOpenNow()) {
       res.status(200).json({ ok: true, skipped: 'market closed, not logged' });

@@ -3,18 +3,25 @@
 // then computes current value, all-time return, and per-position weight.
 
 const POSITIONS = [
-  { ticker: 'INTC', name: 'Intel Corporation',      quantity: 186.28, entryPrice: 101.59 },
-  { ticker: 'NBIS', name: 'Nebius Group',           quantity: 82.44,  entryPrice: 208.63 },
-  { ticker: 'AAOI', name: 'Applied Optoelectronics', quantity: 136.64, entryPrice: 111.21 },
-  { ticker: 'MU',   name: 'Micron Technology',      quantity: 23.63,  entryPrice: 1018.46 },
+  { ticker: 'INTC', name: 'Intel Corporation',      quantity: 102.20, entryPrice: 101.59 },
+  { ticker: 'NBIS', name: 'Nebius Group',           quantity: 54.87,  entryPrice: 208.63 },
+  { ticker: 'AAOI', name: 'Applied Optoelectronics', quantity: 95.73, entryPrice: 111.21 },
+  { ticker: 'MU',   name: 'Micron Technology',      quantity: 12.80,  entryPrice: 1018.46 },
   { ticker: 'CIEN', name: 'Ciena Corporation',      quantity: 24.42,  entryPrice: 429.61 },
-  { ticker: 'SNDK', name: 'SanDisk Corporation',    quantity: 8.73,   entryPrice: 1758.48 },
+  { ticker: 'SNDK', name: 'SanDisk Corporation',    quantity: 6.37,   entryPrice: 1758.48 },
   { ticker: 'META', name: 'Meta Platforms',         quantity: 12.06,  entryPrice: 708.13 },
   { ticker: 'MRVL', name: 'Marvell Technology',     quantity: 27.34,  entryPrice: 272.42 },
-  { ticker: 'LITE', name: 'Lumentum Holdings',      quantity: 7.16,   entryPrice: 1117.08 },
+  { ticker: 'LITE', name: 'Lumentum Holdings',      quantity: 4.67,   entryPrice: 1117.08 },
 ];
 
+// Cash from the Oct 15 sales (84.08 INTC, 10.83 MU, 27.57 NBIS, 40.91 AAOI, 2.36 SNDK, 2.49 LITE at their fills).
+// It is part of the portfolio's value but not of any position, so the live value is positions + CASH. Must match
+// CASH in api/cron-update.js. Change it only when cash actually moves (a sale adds, a buy spends).
+const CASH = 31629.23;
+
 const ENTRY_VALUE = POSITIONS.reduce((sum, p) => sum + p.quantity * p.entryPrice, 0);
+// Weights are shares of the whole portfolio: cost of what is held plus the cash, so the cash is a slice like any other.
+const PORTFOLIO_BASIS = ENTRY_VALUE + CASH;
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -210,8 +217,10 @@ module.exports = async (req, res) => {
       })
     );
 
-    const currentValue = quotes.reduce((sum, p) => sum + p.quantity * p.currentPrice, 0);
-    const allTimeReturnPct = ((currentValue - ENTRY_VALUE) / ENTRY_VALUE) * 100;
+    const positionsValue = quotes.reduce((sum, p) => sum + p.quantity * p.currentPrice, 0);
+    const currentValue = positionsValue + CASH;
+    // Unrealized return on what is still held (drives the tab icon), so cash is left out of it.
+    const allTimeReturnPct = ((positionsValue - ENTRY_VALUE) / ENTRY_VALUE) * 100;
 
     let history = await readAndUpdateHistory(HISTORY_KEY, TRUE_ORIGIN_VALUE, ORIGIN_TIMESTAMP, currentValue, PORTFOLIO_HISTORICAL_CLOSES);
     const recovered = await readRawHistory(RECOVERY_KEY);
@@ -227,12 +236,17 @@ module.exports = async (req, res) => {
       .map((p) => ({
         ticker: p.ticker,
         name: p.name,
-        weight: ((p.quantity * p.entryPrice) / ENTRY_VALUE) * 100,
+        weight: ((p.quantity * p.entryPrice) / PORTFOLIO_BASIS) * 100,
         currentPrice: p.currentPrice,
         entryPrice: p.entryPrice,
         dayChangePct: p.changePct,
         returnPct: ((p.currentPrice - p.entryPrice) / p.entryPrice) * 100,
       }))
+      .concat(
+        CASH > 0
+          ? [{ ticker: 'CASH', name: 'Cash', isCash: true, weight: (CASH / PORTFOLIO_BASIS) * 100, currentPrice: 1, entryPrice: 1, dayChangePct: 0, returnPct: 0, amount: CASH }]
+          : []
+      )
       .sort((a, b) => b.weight - a.weight);
 
     const benchmarks = await benchmarksPromise;
@@ -240,7 +254,8 @@ module.exports = async (req, res) => {
     res.setHeader('Cache-Control', 's-maxage=20, stale-while-revalidate=10');
     res.status(200).json({
       currentValue,
-      entryValue: ENTRY_VALUE,
+      cash: CASH,
+      entryValue: PORTFOLIO_BASIS, // what the weights are shares of: cost of the holdings plus cash
       trueOriginValue: TRUE_ORIGIN_VALUE,
       allTimeReturnPct,
       positions,

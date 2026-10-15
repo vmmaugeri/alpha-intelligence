@@ -743,13 +743,66 @@ function attachChartInteractivity() {
 // Static historical record (no live prices needed — these are settled).
 const CLOSED_POSITIONS = [
   {
+    ticker: 'INTC',
+    status: 'Trimmed',
+    date: '2026-10-15',
+    opened: '2026-08-17',
+    buys: [{ qty: 84.08, price: 101.59 }],
+    sells: [{ qty: 84.08, price: 94.41 }],
+    note: 'Sold 84.08 shares ($7,938) in response to current market conditions.',
+  },
+  {
+    ticker: 'MU',
+    status: 'Trimmed',
+    date: '2026-10-15',
+    opened: '2026-09-09',
+    buys: [{ qty: 10.83, price: 1018.46 }],
+    sells: [{ qty: 10.83, price: 921.72 }],
+    note: 'Sold 10.83 shares ($9,982) in response to current market conditions.',
+  },
+  {
+    ticker: 'NBIS',
+    status: 'Trimmed',
+    date: '2026-10-15',
+    opened: '2026-08-03',
+    buys: [{ qty: 27.57, price: 208.63 }],
+    sells: [{ qty: 27.57, price: 178.82 }],
+    note: 'Sold 27.57 shares ($4,930) in response to current market conditions.',
+  },
+  {
+    ticker: 'AAOI',
+    status: 'Trimmed',
+    date: '2026-10-15',
+    opened: '2026-09-09',
+    buys: [{ qty: 40.91, price: 111.21 }],
+    sells: [{ qty: 40.91, price: 83.44 }],
+    note: 'Sold 40.91 shares ($3,414) in response to current market conditions.',
+  },
+  {
+    ticker: 'SNDK',
+    status: 'Trimmed',
+    date: '2026-10-15',
+    opened: '2026-09-21',
+    buys: [{ qty: 2.36, price: 1758.48 }],
+    sells: [{ qty: 2.36, price: 1360.61 }],
+    note: 'Sold 2.36 shares ($3,211) in response to current market conditions.',
+  },
+  {
+    ticker: 'LITE',
+    status: 'Trimmed',
+    date: '2026-10-15',
+    opened: '2026-10-06',
+    buys: [{ qty: 2.49, price: 1117.08 }],
+    sells: [{ qty: 2.49, price: 865.21 }],
+    note: 'Sold 2.49 shares ($2,154) in response to current market conditions.',
+  },
+  {
     ticker: 'PENG',
     status: 'Closed',
     date: '2026-10-07',
     opened: '2026-10-06',
     buys: [{ qty: 88.03, price: 60.50 }],
     sells: [{ qty: 88.03, price: 72.97 }],
-    note: 'A successful 1-day swing trade: the position rose 20.6% for a $1,098 gain after Q4 earnings came in well above the company’s outlook.',
   },
   {
     ticker: 'BRUN',
@@ -983,20 +1036,13 @@ const TRADE_LOG = {
   AAOI: [{ date: '2026-09-09', kind: 'Opened', qty: 136.64, price: 111.21 }],
   MU: [
     { date: '2026-08-03', kind: 'Opened', qty: 24.3, price: 783.26 },
-    { date: '2026-09-09', kind: 'Opened', qty: 21.48, price: 1011.6 },
-    {
-      date: '2026-10-07', kind: 'Added', qty: 2.15, price: 1087.0,
-      comment: 'Added 2.15 shares ($2,337) ahead of Samsung’s early Q3 figures on Thu 8 Oct, where the tone on memory prices and margins matters most for MU.',
-    },
+    { date: '2026-09-09', kind: 'Opened', qty: 21.48, price: 1011.6 }
   ],
   CIEN: [{ date: '2026-08-14', kind: 'Opened', qty: 40.42, price: 429.61 }],
   SNDK: [
     { date: '2026-09-21', kind: 'Opened', qty: 5.77, price: 1780.99 },
     { date: '2026-10-06', kind: 'Added', qty: 0.59, price: 1676.5 },
-    {
-      date: '2026-10-07', kind: 'Added', qty: 2.37, price: 1724.08,
-      comment: 'Added 2.37 shares ($4,086) for the same Samsung read on Thu 8 Oct, as memory pricing and margins drive SanDisk too.',
-    },
+    { date: '2026-10-07', kind: 'Added', qty: 2.37, price: 1724.08 },
   ],
   META: [{ date: '2026-09-21', kind: 'Opened', qty: 12.06, price: 708.13 }],
   MRVL: [
@@ -1078,16 +1124,31 @@ const TRADE_FILLS = [
   ['2026-10-07', 'PENG', 'S', 88.03, 72.97],
   ['2026-10-07', 'MU', 'B', 2.15, 1087],
   ['2026-10-07', 'SNDK', 'B', 2.37, 1724.08],
+  ['2026-10-15', 'INTC', 'S', 84.08, 94.41],
+  ['2026-10-15', 'MU', 'S', 10.83, 921.72],
+  ['2026-10-15', 'NBIS', 'S', 27.57, 178.82],
+  ['2026-10-15', 'AAOI', 'S', 40.91, 83.44],
+  ['2026-10-15', 'SNDK', 'S', 2.36, 1360.61],
+  ['2026-10-15', 'LITE', 'S', 2.49, 865.21],
 ];
 
 function activeNote(ticker) {
-  const latest = (TRADE_LOG[ticker] || [])
+  // The latest comment on a buy, or the note on a trim of this still-open position, whichever is newer.
+  const candidates = (TRADE_LOG[ticker] || [])
     .filter((t) => t.comment)
-    .sort((x, y) => new Date(y.date) - new Date(x.date))[0];
+    .map((t) => ({ date: t.date, text: t.comment }))
+    .concat(
+      CLOSED_POSITIONS.filter((pos) => pos.ticker === ticker && pos.status === 'Trimmed' && pos.note).map((pos) => ({
+        date: pos.date,
+        text: pos.note,
+      }))
+    )
+    .sort((x, y) => new Date(y.date) - new Date(x.date));
+  const latest = candidates[0];
   if (!latest) return null;
   const ageDays = (Date.now() - new Date(`${latest.date}T12:00:00Z`).getTime()) / 86400000;
   if (ageDays > NOTE_DAYS) return null;
-  return { text: latest.comment, dateLabel: formatClosedDate(latest.date) };
+  return { text: latest.text, dateLabel: formatClosedDate(latest.date) };
 }
 
 // A note on an open position leads with the date the change was made. A closed position already shows its
@@ -1241,7 +1302,8 @@ function renderClosedPositions() {
 
     li.appendChild(name);
     li.appendChild(change);
-    if (pos.note) {
+    // A trim's note shows under its open position (activeNote), so it is not repeated here.
+    if (pos.note && pos.status !== 'Trimmed') {
       li.classList.add('has-note');
       li.appendChild(buildNote(pos.note, undefined, `closed:${pos.ticker}:${pos.date}`));
     }
@@ -1660,7 +1722,7 @@ function setPieHover(index, x, y) {
     drawPie(pieState.positions, pieHighlight());
   }
   const canvas = document.getElementById('pie');
-  if (canvas) canvas.style.cursor = index != null ? 'pointer' : '';
+  if (canvas) canvas.style.cursor = index != null && !pieState.positions[index].isCash ? 'pointer' : '';
 
   const tooltip = document.getElementById('pieTooltip');
   if (!tooltip) return;
@@ -1725,6 +1787,7 @@ function attachPieInteractivity() {
     const rect = canvas.getBoundingClientRect();
     const index = pieIndexAt(e.clientX - rect.left, e.clientY - rect.top);
     if (index == null) return;
+    if (pieState.positions[index].isCash) return; // cash has no trade history
     const ticker = pieState.positions[index].ticker;
     if (ticker === pieSelected) closeHistory();
     else openHistory(ticker);
@@ -2184,6 +2247,9 @@ const REPLAY_END_MS = 3000; // today's date fading in and out
 const REPLAY_START_DATE = '2026-08-01';
 let replay = null;
 
+const CASH_SINCE = '2026-10-15';
+let lastCash = 0;
+
 function replaySteps() {
   const dates = [...new Set(TRADE_FILLS.map((f) => f[0]))].sort();
   const hold = {};
@@ -2199,11 +2265,14 @@ function replaySteps() {
         h.cost = h.qty * avg;
       }
     });
-    const total = Object.values(hold).reduce((sum, h) => sum + (h.qty > 0.005 ? h.cost : 0), 0);
+    // Cash only appears once it was actually held: the sales of 2026-10-15 (earlier sales funded same-day buys).
+    const cash = date >= CASH_SINCE && lastCash > 0 ? lastCash : 0;
+    const total = Object.values(hold).reduce((sum, h) => sum + (h.qty > 0.005 ? h.cost : 0), 0) + cash;
     const weights = {};
     Object.entries(hold).forEach(([ticker, h]) => {
       if (h.qty > 0.005) weights[ticker] = (h.cost / total) * 100;
     });
+    if (cash > 0) weights.CASH = (cash / total) * 100;
     return { date, weights };
   });
 }
@@ -2656,6 +2725,32 @@ async function init() {
     data.positions.forEach((p) => {
       const li = document.createElement('li');
 
+      if (p.isCash) {
+        // Cash sits among the positions: no quote, no daily move, just its amount and its share of the portfolio.
+        const cashName = document.createElement('span');
+        cashName.className = 'pos-name';
+        cashName.textContent = 'Cash';
+        const amount = document.createElement('span');
+        amount.className = 'pos-cash-amt';
+        amount.textContent = formatCurrency(p.amount);
+        cashName.appendChild(amount);
+        const cashRight = document.createElement('span');
+        cashRight.className = 'pos-right';
+        const dash1 = document.createElement('span');
+        dash1.className = 'pos-day-change pos-dash';
+        dash1.textContent = '\u2014';
+        const dash2 = document.createElement('span');
+        dash2.className = 'pos-change pos-dash';
+        dash2.textContent = '\u2014';
+        const cashWeight = document.createElement('span');
+        cashWeight.className = 'pos-weight';
+        cashWeight.textContent = `${Math.round(p.weight)}%`;
+        cashRight.append(dash1, dash2, cashWeight);
+        li.append(cashName, cashRight);
+        list.appendChild(li);
+        return;
+      }
+
       const name = document.createElement('a');
       name.className = 'pos-name';
       name.href = `https://finance.yahoo.com/quote/${p.ticker}`;
@@ -2695,9 +2790,10 @@ async function init() {
       list.appendChild(li);
     });
 
+    lastCash = data.cash || 0;
     lastPositions = data.positions;
     lastApiEntryValue = data.entryValue;
-    renderMovers(data.positions);
+    renderMovers(data.positions.filter((p) => !p.isCash));
 
     try {
       layoutSideNotes();

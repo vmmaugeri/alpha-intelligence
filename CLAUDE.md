@@ -49,6 +49,22 @@ not just look plausible.
 Each rebalance also gets short notes (the little bubbles) under the positions it
 touched. See "Notes" below.
 
+## Cash (added 2026-10-15)
+
+- The Oct 15 sell-off (a trim of INTC, MU, NBIS, AAOI, SNDK and LITE at the fills, "cutting losses and holding cash")
+  was the first time proceeds were **not** reinvested, so the site now has a cash line: `CASH` in `api/quotes.js` and
+  `api/cron-update.js` (**both must match**, like `POSITIONS`). The live value is positions + `CASH`, the API returns
+  `cash`, and Cash is **a position like the others**: a "Cash $31,629" row in the list (24h and all-time show a dash)
+  and a CASH slice in the pie (`isCash` in the API response; not clickable, not a gainer/loser). Weights are shares of
+  cost basis plus cash (`PORTFOLIO_BASIS`, returned as `entryValue`), so they still add to 100%. The replay shows the
+  slice from 2026-10-15 on (`CASH_SINCE`). Without `CASH` the headline would have dropped by the proceeds the moment
+  the quantities were cut.
+- **Change `CASH` whenever cash moves**: a sale adds `qty x fill`, a buy that is not funded by a same-day sale spends it.
+  Sells that fund buys on the same day net out as before. `allTimeReturnPct` (the tab icon) is the return on the
+  positions still held, so it leaves cash out; the page's headline all-time % is value vs `TRUE_ORIGIN_VALUE`.
+- Check after a rebalance: replaying `TRADE_FILLS` must give `POSITIONS`, and `CASH` must equal the previous cash plus
+  sells minus buys (the Oct 15 cash was exactly the sum of those six sells).
+
 ## How to add a closed position correctly
 
 - **Weight is computed from ENTRY price × quantity, not current price.** This
@@ -131,7 +147,10 @@ touching any of it:
   `Added`, shares, fill price, and a `comment` when there is a note). A comment shows as the bubble for
   `NOTE_DAYS` (14) after its date and then disappears by itself, but stays in the ticker's history for good.
   **Closed positions:** put a `note` on the entry in `CLOSED_POSITIONS`; it shows for as long as the entry is
-  one of the 3 most recent.
+  one of the 3 most recent. **A trim of a still-open position** also carries its `note` on its `Trimmed` entry:
+  that bubble shows under the open position for `NOTE_DAYS` (`activeNote` takes the newer of a buy comment and a trim
+  note) and is not repeated in the Recently Closed list. On 2026-10-15 all earlier bubbles (the MU and SNDK Samsung
+  comments, PENG's note) were removed at Valerio's request and replaced by six one-line trim notes.
 - **Pop-out:** each bubble arrives (a calm fade with a short drift into place, about 1s, no bounce or scaling, its own
   delay and duration) only once it has been scrolled properly into view: it must
   be fully visible and above the bottom 14% of the screen (`IntersectionObserver` in `script.js`). Bubbles below the fold
