@@ -743,13 +743,30 @@ function attachChartInteractivity() {
 // Static historical record (no live prices needed — these are settled).
 const CLOSED_POSITIONS = [
   {
+    ticker: 'NBIS',
+    status: 'Trimmed',
+    date: '2026-10-19',
+    opened: '2026-08-28',
+    buys: [{ qty: 11.41, price: 208.63 }],
+    sells: [{ qty: 11.41, price: 172.61 }],
+    note: 'Sold 11.41 shares ($1,969) to reduce funding risk after CoreWeave’s bond selloff.',
+  },
+  {
+    ticker: 'AAOI',
+    status: 'Trimmed',
+    date: '2026-10-19',
+    opened: '2026-09-09',
+    buys: [{ qty: 55.04, price: 111.21 }],
+    sells: [{ qty: 55.04, price: 79.64 }],
+    note: 'Sold 55.04 shares ($4,383) as AOI keeps needing new money to fund its growth.',
+  },
+  {
     ticker: 'INTC',
     status: 'Trimmed',
     date: '2026-10-15',
     opened: '2026-08-17',
     buys: [{ qty: 84.08, price: 101.59 }],
     sells: [{ qty: 84.08, price: 94.41 }],
-    note: 'Sold 84.08 shares ($7,938) in response to current market conditions.',
   },
   {
     ticker: 'MU',
@@ -758,7 +775,6 @@ const CLOSED_POSITIONS = [
     opened: '2026-09-09',
     buys: [{ qty: 10.83, price: 1018.46 }],
     sells: [{ qty: 10.83, price: 921.72 }],
-    note: 'Sold 10.83 shares ($9,982) in response to current market conditions.',
   },
   {
     ticker: 'NBIS',
@@ -767,7 +783,6 @@ const CLOSED_POSITIONS = [
     opened: '2026-08-03',
     buys: [{ qty: 27.57, price: 208.63 }],
     sells: [{ qty: 27.57, price: 178.82 }],
-    note: 'Sold 27.57 shares ($4,930) in response to current market conditions.',
   },
   {
     ticker: 'AAOI',
@@ -776,7 +791,6 @@ const CLOSED_POSITIONS = [
     opened: '2026-09-09',
     buys: [{ qty: 40.91, price: 111.21 }],
     sells: [{ qty: 40.91, price: 83.44 }],
-    note: 'Sold 40.91 shares ($3,414) in response to current market conditions.',
   },
   {
     ticker: 'SNDK',
@@ -785,7 +799,6 @@ const CLOSED_POSITIONS = [
     opened: '2026-09-21',
     buys: [{ qty: 2.36, price: 1758.48 }],
     sells: [{ qty: 2.36, price: 1360.61 }],
-    note: 'Sold 2.36 shares ($3,211) in response to current market conditions.',
   },
   {
     ticker: 'LITE',
@@ -794,7 +807,6 @@ const CLOSED_POSITIONS = [
     opened: '2026-10-06',
     buys: [{ qty: 2.49, price: 1117.08 }],
     sells: [{ qty: 2.49, price: 865.21 }],
-    note: 'Sold 2.49 shares ($2,154) in response to current market conditions.',
   },
   {
     ticker: 'PENG',
@@ -1054,6 +1066,18 @@ const TRADE_LOG = {
     { date: '2026-08-03', kind: 'Opened', qty: 15.4, price: 687.06 },
     { date: '2026-10-06', kind: 'Opened', qty: 7.16, price: 1117.08 },
   ],
+  TSM: [
+    {
+      date: '2026-10-19', kind: 'Opened', qty: 10, price: 426.5,
+      comment: 'Bought 10 shares ($4,265) of the chipmaker every AI company relies on.',
+    },
+  ],
+  NVDA: [
+    {
+      date: '2026-10-19', kind: 'Opened', qty: 14.64, price: 218.52,
+      comment: 'Bought 14.64 shares ($3,199) after a 12% drop from its October peak.',
+    },
+  ],
 };
 
 // Every fill on the portfolio, one row each: [date, ticker, 'B' buy or 'S' sell, shares, price]. This is the exact
@@ -1130,6 +1154,10 @@ const TRADE_FILLS = [
   ['2026-10-15', 'AAOI', 'S', 40.91, 83.44],
   ['2026-10-15', 'SNDK', 'S', 2.36, 1360.61],
   ['2026-10-15', 'LITE', 'S', 2.49, 865.21],
+  ['2026-10-19', 'NBIS', 'S', 11.41, 172.61],
+  ['2026-10-19', 'AAOI', 'S', 55.04, 79.64],
+  ['2026-10-19', 'TSM', 'B', 10, 426.5],
+  ['2026-10-19', 'NVDA', 'B', 14.64, 218.52],
 ];
 
 function activeNote(ticker) {
@@ -2248,11 +2276,11 @@ const REPLAY_START_DATE = '2026-08-01';
 let replay = null;
 
 const CASH_SINCE = '2026-10-15';
-let lastCash = 0;
 
 function replaySteps() {
   const dates = [...new Set(TRADE_FILLS.map((f) => f[0]))].sort();
   const hold = {};
+  let cashHeld = 0;
   return dates.map((date) => {
     TRADE_FILLS.filter((f) => f[0] === date).forEach(([, ticker, side, qty, price]) => {
       const h = hold[ticker] || (hold[ticker] = { qty: 0, cost: 0 });
@@ -2265,8 +2293,14 @@ function replaySteps() {
         h.cost = h.qty * avg;
       }
     });
-    // Cash only appears once it was actually held: the sales of 2026-10-15 (earlier sales funded same-day buys).
-    const cash = date >= CASH_SINCE && lastCash > 0 ? lastCash : 0;
+    // Cash only appears once it was actually held, from 2026-10-15 on (earlier sales funded same-day buys): the sales
+    // add to it and the buys spend it, so it ends at CASH exactly.
+    if (date >= CASH_SINCE) {
+      TRADE_FILLS.filter((f) => f[0] === date).forEach(([, , side, qty, price]) => {
+        cashHeld += (side === 'S' ? 1 : -1) * qty * price;
+      });
+    }
+    const cash = cashHeld > 0.5 ? cashHeld : 0;
     const total = Object.values(hold).reduce((sum, h) => sum + (h.qty > 0.005 ? h.cost : 0), 0) + cash;
     const weights = {};
     Object.entries(hold).forEach(([ticker, h]) => {
@@ -2790,7 +2824,6 @@ async function init() {
       list.appendChild(li);
     });
 
-    lastCash = data.cash || 0;
     lastPositions = data.positions;
     lastApiEntryValue = data.entryValue;
     renderMovers(data.positions.filter((p) => !p.isCash));

@@ -62,8 +62,13 @@ touched. See "Notes" below.
 - **Change `CASH` whenever cash moves**: a sale adds `qty x fill`, a buy that is not funded by a same-day sale spends it.
   Sells that fund buys on the same day net out as before. `allTimeReturnPct` (the tab icon) is the return on the
   positions still held, so it leaves cash out; the page's headline all-time % is value vs `TRUE_ORIGIN_VALUE`.
-- Check after a rebalance: replaying `TRADE_FILLS` must give `POSITIONS`, and `CASH` must equal the previous cash plus
-  sells minus buys (the Oct 15 cash was exactly the sum of those six sells).
+- Check after a rebalance: replaying `TRADE_FILLS` must give `POSITIONS`, and `CASH` must equal the sum of every fill
+  since `CASH_SINCE` (2026-10-15): sells add, buys subtract (the Oct 15 cash was exactly the sum of those six sells;
+  after the Oct 19 trades it is 30,517.96). The replay computes its cash slice the same way, so it ends at `CASH`.
+- **2026-10-19 trades:** sold NBIS 11.41 and AAOI 55.04, bought TSM 10 and NVDA 14.64 (all at the fills in
+  `TRADE_FILLS`). Valerio also placed and reversed a 500-share leveraged TSM buy and sell the same day, a mistake he fixed:
+  it is **deliberately not recorded** anywhere, like RAM and SIVE. The bubbles' dollar amounts are computed from the fills
+  (qty x price), not typed by hand: some figures Valerio supplied were off by a few dollars and were corrected.
 
 ## How to add a closed position correctly
 
