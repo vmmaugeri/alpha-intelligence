@@ -1071,19 +1071,12 @@ li.note-left > .note.note-pop {
   color: var(--muted);
 }
 
-/* The weekly note: a short piece under the chart, date on the left and the week's figures on the right */
-.weekly {
-  margin-top: 28px;
-}
-
+/* The weekly note: date on the left and the week's figures on the right, then the words, opened from a chip on the headline row. */
 .weekly-card {
   border: 1px solid var(--hairline);
   border-radius: 10px;
   padding: 14px 16px 16px;
-}
-
-.weekly-card.compact {
-  margin-top: 10px;
+  background: var(--paper);
 }
 
 .weekly-head {
@@ -1114,24 +1107,38 @@ li.note-left > .note.note-pop {
   color: var(--ink);
 }
 
-.weekly-card.compact .weekly-text {
-  font-size: 12.5px;
-  color: var(--muted);
+/* chip: sits on the headline row and opens the card over the page, so nothing moves */
+.stat-row {
+  position: relative;
 }
 
-.weekly-toggle {
-  margin-top: 10px;
-  padding: 0;
-  border: 0;
+.weekly-chip {
+  position: absolute;
+  top: 6px;
+  right: 0;
+  padding: 3px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
   background: none;
   font: inherit;
   font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--muted);
   cursor: pointer;
 }
 
-.weekly-toggle:hover {
+.weekly-chip:hover,
+.weekly-chip[aria-expanded='true'] {
   color: var(--ink);
+  border-color: var(--muted);
+}
+
+.weekly-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+  border-radius: 10px;
 }

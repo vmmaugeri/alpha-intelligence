@@ -177,11 +177,14 @@ touching any of it:
 
 ## The weekly note (added 2026-10-19)
 
-- A short piece (100 to 200 words, conversational: "This week was brutal...") under the chart, in an outlined card with
-  the date top left and two figures top right on the same line: the week's change and the number of trades. Data is
-  `WEEKLY_NOTES` in `script.js`, newest first; only the newest shows, older ones sit behind an "Earlier weeks" link
-  (it appears once there are two or more). **Valerio moved this from Substack to the site on purpose** (the newsletter
-  "has lost priority"): do not suggest going back to Substack.
+- A short piece (conversational: "This past week was the worst...") shown as an outlined card with the date top left and
+  two figures top right on the same line: the week's change and the number of trades. **It lives behind a small chip
+  on the headline row, "Thoughts on the week ›"**, and opens over the page (it takes no room, so the positions never
+  move); a click elsewhere or Escape closes it. The first version was an inline card that pushed the positions down
+  ~260px and Valerio hated that; a teaser strip (+76px) and a wide-screen margin note were tried, and the chip won
+  (2026-10-19). Do not put it back in the page flow. Data is `WEEKLY_NOTES` in `script.js`, newest first; only the
+  newest shows. **Valerio moved this from Substack to the site on purpose** (the newsletter "has lost priority"): do not
+  suggest going back to Substack.
 - **Written after the Friday close.** Each entry's figures are computed by `weeklyStats(date)`: this Friday's close
   against the Friday before (from the history), and the count of `TRADE_FILLS` dated in that week. So the figures are
   never typed by hand and an entry always shows its own week even if written later. Add an entry as

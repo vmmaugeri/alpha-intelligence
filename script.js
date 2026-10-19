@@ -1034,8 +1034,6 @@ const WEEKLY_NOTES = [
   },
 ];
 
-let weeklyShowEarlier = false;
-
 // The change and the trade count for the week that ended on `date` (a Friday), as if written after that close.
 function weeklyStats(date) {
   const prev = new Date(`${date}T12:00:00Z`);
@@ -1084,28 +1082,47 @@ function buildWeeklyCard(note, compact) {
   body.className = 'weekly-text';
   body.textContent = note.text;
   card.append(head, body);
-  return card;
+  return { card, st };
+}
+
+// The note sits behind a small "Thoughts on the week" chip on the headline row and opens as a card over the page, so
+// it takes no room and the positions never move. Clicking anywhere else, or Escape, closes it. (A two-line teaser
+// strip and a wide-screen margin note were tried on 2026-10-19 and the chip won.)
+let weeklyOpen = false;
+
+function setWeeklyOpen(open) {
+  weeklyOpen = open;
+  const pop = document.querySelector('.weekly-pop');
+  const chip = document.querySelector('.weekly-chip');
+  if (pop) pop.hidden = !open;
+  if (chip) chip.setAttribute('aria-expanded', String(open));
 }
 
 function renderWeekly() {
-  const wrap = document.getElementById('weekly');
-  if (!wrap || WEEKLY_NOTES.length === 0 || lastHistory.length === 0) return;
-  wrap.innerHTML = '';
-  wrap.appendChild(buildWeeklyCard(WEEKLY_NOTES[0], false));
-  if (WEEKLY_NOTES.length > 1) {
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = 'weekly-toggle';
-    toggle.textContent = weeklyShowEarlier ? 'Hide earlier weeks' : 'Earlier weeks';
-    toggle.addEventListener('click', () => {
-      weeklyShowEarlier = !weeklyShowEarlier;
-      renderWeekly();
-    });
-    wrap.appendChild(toggle);
-    if (weeklyShowEarlier) WEEKLY_NOTES.slice(1).forEach((n) => wrap.appendChild(buildWeeklyCard(n, true)));
-  }
-  wrap.hidden = false;
+  const row = document.querySelector('.stat-row');
+  if (!row || WEEKLY_NOTES.length === 0 || lastHistory.length === 0) return;
+  row.querySelectorAll('.weekly-chip, .weekly-pop').forEach((el) => el.remove());
+  const chip = document.createElement('button');
+  chip.type = 'button';
+  chip.className = 'weekly-chip';
+  chip.setAttribute('aria-expanded', String(weeklyOpen));
+  chip.textContent = 'Thoughts on the week \u203a';
+  const pop = document.createElement('div');
+  pop.className = 'weekly-pop';
+  pop.hidden = !weeklyOpen;
+  pop.appendChild(buildWeeklyCard(WEEKLY_NOTES[0], false).card);
+  chip.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setWeeklyOpen(!weeklyOpen);
+  });
+  pop.addEventListener('click', (e) => e.stopPropagation());
+  row.append(chip, pop);
 }
+
+document.addEventListener('click', () => weeklyOpen && setWeeklyOpen(false));
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && weeklyOpen) setWeeklyOpen(false);
+});
 
 // --- Notes: the little bubbles under a position ---
 // One or two short sentences about the latest move in a position: what was added or opened, what a close
