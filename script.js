@@ -1023,6 +1023,90 @@ function formatClosedDate(dateStr) {
   });
 }
 
+// --- The weekly note ---
+// A short piece (100 to 200 words) written after the close each Friday, newest first. Above the words the card shows
+// the date on the left and two figures on the right, worked out from the history and the fills: the week's change
+// (this Friday's close against the Friday before) and how many trades were made. Older weeks sit behind "Earlier".
+const WEEKLY_NOTES = [
+  {
+    date: '2026-10-16',
+    text: 'This past week was the worst of the portfolio so far. The portfolio fell 17.9%, from $125,972 to $103,397, wiping out about 90% of the gains from the past few months and taking us to the lowest point since the project began. On Wednesday the bad news came from two places. First, the CPI showed inflation climbing, which pushed investors away from risky assets. Second, CoreWeave’s bonds yielded nearly 15% as worries grew about how it funds its AI buildout, and the whole AI trade sold off with it. On Thursday I trimmed six of my riskiest positions and moved $31,629 into cash. The market didn’t stop there. On Friday the Nasdaq finished its worst week since June, when chip stocks sank and investors turned defensive. I don’t know if it gets worse from here. Nobody does. I would just rather sit out some of this than keep guessing. We are still 3.4% above where we started on August 1, and from now on I will take a more balanced, risk-averse approach. After all, this project is about transparency and showing my learning. This week is about the cash. I plan to diversify into some bigger names, likely Nvidia and TSMC, possibly Amazon, and if the credit worries settle I will rebuild some of my higher-conviction positions. Until then we wait and play it safe. It has been a great two and a half months, and even after this beating we are still ahead of the Nasdaq and SMH, by 0.3 and 1.6 points. Valerio',
+  },
+];
+
+let weeklyShowEarlier = false;
+
+// The change and the trade count for the week that ended on `date` (a Friday), as if written after that close.
+function weeklyStats(date) {
+  const prev = new Date(`${date}T12:00:00Z`);
+  prev.setUTCDate(prev.getUTCDate() - 7);
+  const prevKey = prev.toISOString().slice(0, 10);
+  const closeOn = (key) => {
+    let v = null;
+    for (const p of lastHistory) {
+      if (etDateFormat.format(new Date(p.t)) <= key) v = p.value;
+      else break;
+    }
+    return v;
+  };
+  const end = closeOn(date);
+  const start = closeOn(prevKey);
+  const trades = TRADE_FILLS.filter((f) => f[0] > prevKey && f[0] <= date).length;
+  return { pct: end != null && start ? (end / start - 1) * 100 : null, trades };
+}
+
+function buildWeeklyCard(note, compact) {
+  const card = document.createElement('div');
+  card.className = compact ? 'weekly-card compact' : 'weekly-card';
+  const head = document.createElement('div');
+  head.className = 'weekly-head';
+  const date = document.createElement('span');
+  date.className = 'weekly-date';
+  date.textContent = new Date(`${note.date}T12:00:00Z`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+  const stats = document.createElement('span');
+  stats.className = 'weekly-stats';
+  const st = weeklyStats(note.date);
+  if (st.pct != null) {
+    const pct = document.createElement('span');
+    pct.className = st.pct < 0 ? 'weekly-pct negative' : 'weekly-pct';
+    pct.textContent = `${st.pct >= 0 ? '+' : '−'}${Math.abs(st.pct).toFixed(1)}%`;
+    stats.appendChild(pct);
+  }
+  const trades = document.createElement('span');
+  trades.textContent = `${st.trades} ${st.trades === 1 ? 'trade' : 'trades'}`;
+  stats.appendChild(trades);
+  head.append(date, stats);
+  const body = document.createElement('p');
+  body.className = 'weekly-text';
+  body.textContent = note.text;
+  card.append(head, body);
+  return card;
+}
+
+function renderWeekly() {
+  const wrap = document.getElementById('weekly');
+  if (!wrap || WEEKLY_NOTES.length === 0 || lastHistory.length === 0) return;
+  wrap.innerHTML = '';
+  wrap.appendChild(buildWeeklyCard(WEEKLY_NOTES[0], false));
+  if (WEEKLY_NOTES.length > 1) {
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'weekly-toggle';
+    toggle.textContent = weeklyShowEarlier ? 'Hide earlier weeks' : 'Earlier weeks';
+    toggle.addEventListener('click', () => {
+      weeklyShowEarlier = !weeklyShowEarlier;
+      renderWeekly();
+    });
+    wrap.appendChild(toggle);
+    if (weeklyShowEarlier) WEEKLY_NOTES.slice(1).forEach((n) => wrap.appendChild(buildWeeklyCard(n, true)));
+  }
+  wrap.hidden = false;
+}
+
 // --- Notes: the little bubbles under a position ---
 // One or two short sentences about the latest move in a position: what was added or opened, what a close
 // made, and why. Open positions are keyed by ticker and show for NOTE_DAYS after their date, then
@@ -2827,6 +2911,11 @@ async function init() {
     lastPositions = data.positions;
     lastApiEntryValue = data.entryValue;
     renderMovers(data.positions.filter((p) => !p.isCash));
+    try {
+      renderWeekly();
+    } catch (weeklyErr) {
+      console.error(weeklyErr);
+    }
 
     try {
       layoutSideNotes();

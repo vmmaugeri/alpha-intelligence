@@ -175,6 +175,24 @@ touching any of it:
   release) and compute the trade numbers from the fills. If a claim can't be
   confirmed, leave it out and tell Valerio instead of publishing it.
 
+## The weekly note (added 2026-10-19)
+
+- A short piece (100 to 200 words, conversational: "This week was brutal...") under the chart, in an outlined card with
+  the date top left and two figures top right on the same line: the week's change and the number of trades. Data is
+  `WEEKLY_NOTES` in `script.js`, newest first; only the newest shows, older ones sit behind an "Earlier weeks" link
+  (it appears once there are two or more). **Valerio moved this from Substack to the site on purpose** (the newsletter
+  "has lost priority"): do not suggest going back to Substack.
+- **Written after the Friday close.** Each entry's figures are computed by `weeklyStats(date)`: this Friday's close
+  against the Friday before (from the history), and the count of `TRADE_FILLS` dated in that week. So the figures are
+  never typed by hand and an entry always shows its own week even if written later. Add an entry as
+  `{ date: 'YYYY-MM-DD' (the Friday), text }`. End it with one or two sentences on what the coming week will focus on.
+- **Verify every factual claim and number before it goes in** (same rule as the bubbles): weekly change from the
+  history, trades from the fills, catalysts from at least one real source. First entry (2026-10-16): -17.9% (Oct 9
+  close $125,972 to Oct 16 close $103,397), six trades (the Oct 15 trims), catalysts: CoreWeave's debt scare and the hot
+  September CPI on Wed Oct 14, then the Nasdaq's worst week since June.
+- **Fear & Greed was deliberately postponed** (small one-line gauge next to the market status; CNN has no official
+  free feed, so it must fail quietly). Valerio asked to be reminded after the first weekly note is written.
+
 ## Ticker history (click a slice in the pie)
 
 - Clicking a slice opens that ticker's history under the pie (click again, the x, or Escape closes it): every
