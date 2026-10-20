@@ -1124,6 +1124,11 @@ li.note-left > .note.note-pop {
   font-weight: 500;
 }
 
+.weekly-up {
+  color: var(--accent);
+  font-weight: 500;
+}
+
 /* chip: sits on the headline row and opens the card over the page, so nothing moves */
 .stat-row {
   position: relative;
