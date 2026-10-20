@@ -1101,10 +1101,27 @@ li.note-left > .note.note-pop {
 }
 
 .weekly-text {
-  margin: 10px 0 0;
+  margin-top: 12px;
   font-size: 13.5px;
   line-height: 1.65;
   color: var(--ink);
+}
+
+.weekly-text p {
+  margin: 0 0 12px;
+}
+
+.weekly-text p:last-child {
+  margin-bottom: 0;
+}
+
+.weekly-text .weekly-sign {
+  color: var(--muted);
+}
+
+.weekly-down {
+  color: var(--negative);
+  font-weight: 500;
 }
 
 /* chip: sits on the headline row and opens the card over the page, so nothing moves */

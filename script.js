@@ -1024,13 +1024,14 @@ function formatClosedDate(dateStr) {
 }
 
 // --- The weekly note ---
-// A short piece (100 to 200 words) written after the close each Friday, newest first. Above the words the card shows
+// A short piece written after the close each Friday, newest first. In `text`, a blank line starts a new paragraph and
+// [[double brackets]] colour a falling percentage red. Above the words the card shows
 // the date on the left and two figures on the right, worked out from the history and the fills: the week's change
 // (this Friday's close against the Friday before) and how many trades were made. Older weeks sit behind "Earlier".
 const WEEKLY_NOTES = [
   {
     date: '2026-10-16',
-    text: 'This past week was the worst of the portfolio so far. The portfolio fell 17.9%, from $125,972 to $103,397, wiping out about 90% of the gains from the past few months and taking us to the lowest point since the project began. On Wednesday the bad news came from two places. First, the CPI showed inflation climbing, which pushed investors away from risky assets. Second, CoreWeave’s bonds yielded nearly 15% as worries grew about how it funds its AI buildout, and the whole AI trade sold off with it. On Thursday I trimmed six of my riskiest positions and moved $31,629 into cash. The market didn’t stop there. On Friday the Nasdaq finished its worst week since June, when chip stocks sank and investors turned defensive. I don’t know if it gets worse from here. Nobody does. I would just rather sit out some of this than keep guessing. We are still 3.4% above where we started on August 1, and from now on I will take a more balanced, risk-averse approach. After all, this project is about transparency and showing my learning. This week is about the cash. I plan to diversify into some bigger names, likely Nvidia and TSMC, possibly Amazon, and if the credit worries settle I will rebuild some of my higher-conviction positions. Until then we wait and play it safe. It has been a great two and a half months, and even after this beating we are still ahead of the Nasdaq and SMH, by 0.3 and 1.6 points. Valerio',
+    text: 'This past week was the worst of the portfolio so far. The portfolio fell [[17.9%]], from $125,972 to $103,397, wiping out about 90% of the gains from the past few months and taking us to the lowest point since the project began.\n\nOn Wednesday the bad news came from two places. First, the CPI showed inflation climbing, which pushed investors away from risky assets. Second, CoreWeave’s bonds yielded nearly 15% as worries grew about how it funds its AI buildout, and the whole AI trade sold off with it. On Thursday I trimmed six of my riskiest positions and moved $31,629 into cash. The market didn’t stop there. On Friday the Nasdaq finished its worst week since June, when chip stocks sank and investors turned defensive.\n\nI don’t know if it gets worse from here. Nobody does. I would just rather sit out some of this than keep guessing. We are still 3.4% above where we started on August 1, and from now on I will take a more balanced, risk-averse approach. After all, this project is about transparency and showing my learning.\n\nThis week is about the cash. I plan to diversify into some bigger names, likely Nvidia and TSMC, possibly Amazon, and if the credit worries settle I will rebuild some of my higher-conviction positions. Until then we wait and play it safe.\n\nIt has been a great two and a half months, and even after this beating we are still ahead of the Nasdaq and SMH, by 0.3 and 1.6 points.\n\nValerio',
   },
 ];
 
@@ -1078,9 +1079,23 @@ function buildWeeklyCard(note, compact) {
   trades.textContent = `${st.trades} ${st.trades === 1 ? 'trade' : 'trades'}`;
   stats.appendChild(trades);
   head.append(date, stats);
-  const body = document.createElement('p');
+  const body = document.createElement('div');
   body.className = 'weekly-text';
-  body.textContent = note.text;
+  note.text.split('\n\n').forEach((para, i, all) => {
+    const p = document.createElement('p');
+    if (i === all.length - 1 && all.length > 1 && para.length < 30) p.className = 'weekly-sign';
+    para.split(/\[\[(.+?)\]\]/).forEach((chunk, j) => {
+      if (j % 2 === 1) {
+        const down = document.createElement('span');
+        down.className = 'weekly-down';
+        down.textContent = chunk;
+        p.appendChild(down);
+      } else if (chunk) {
+        p.appendChild(document.createTextNode(chunk));
+      }
+    });
+    body.appendChild(p);
+  });
   card.append(head, body);
   return { card, st };
 }

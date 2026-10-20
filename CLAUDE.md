@@ -183,7 +183,8 @@ touching any of it:
   move); a click elsewhere or Escape closes it. The first version was an inline card that pushed the positions down
   ~260px and Valerio hated that; a teaser strip (+76px) and a wide-screen margin note were tried, and the chip won
   (2026-10-19). Do not put it back in the page flow. Data is `WEEKLY_NOTES` in `script.js`, newest first; only the
-  newest shows. **Valerio moved this from Substack to the site on purpose** (the newsletter "has lost priority"): do not
+  newest shows. In `text`, a blank line (`\n\n`) starts a new paragraph, `[[double brackets]]` colour a falling percentage
+  red (`.weekly-down`), and a short last paragraph is shown as a muted sign-off. **Valerio moved this from Substack to the site on purpose** (the newsletter "has lost priority"): do not
   suggest going back to Substack.
 - **Written after the Friday close.** Each entry's figures are computed by `weeklyStats(date)`: this Friday's close
   against the Friday before (from the history), and the count of `TRADE_FILLS` dated in that week. So the figures are
