@@ -64,11 +64,16 @@ touched. See "Notes" below.
   positions still held, so it leaves cash out; the page's headline all-time % is value vs `TRUE_ORIGIN_VALUE`.
 - Check after a rebalance: replaying `TRADE_FILLS` must give `POSITIONS`, and `CASH` must equal the sum of every fill
   since `CASH_SINCE` (2026-10-15): sells add, buys subtract (the Oct 15 cash was exactly the sum of those six sells;
-  after the Oct 19 trades it is 30,517.96). The replay computes its cash slice the same way, so it ends at `CASH`.
+  after the Oct 19 trades it was 30,517.96, and after the Oct 27 trades it is 29,673.80). The replay computes its cash slice the same way, so it ends at `CASH`.
 - **2026-10-19 trades:** sold NBIS 11.41 and AAOI 55.04, bought TSM 10 and NVDA 14.64 (all at the fills in
   `TRADE_FILLS`). Valerio also placed and reversed a 500-share leveraged TSM buy and sell the same day, a mistake he fixed:
   it is **deliberately not recorded** anywhere, like RAM and SIVE. The bubbles' dollar amounts are computed from the fills
   (qty x price), not typed by hand: some figures Valerio supplied were off by a few dollars and were corrected.
+
+- **2026-10-27 trades:** sold NBIS 8 at 170.33 (a `Trimmed` entry, opened 2026-09-08) and bought BE 10 at 220.68, a
+  re-entry in BE (closed Sept 21), so BE is back in `POSITIONS` and its earlier buys are back in `TRADE_LOG`. The NBIS bubble
+  leaves out Valerio's claim that Nebius "declined Nvidia's credit support": no source confirmed it (searched 2026-10-27),
+  so only "borrowing keeps rising" (Citi $3.5B facility, $775M secured facility in July) is said.
 
 ## How to add a closed position correctly
 

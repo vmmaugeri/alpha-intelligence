@@ -7,7 +7,7 @@
 
 const POSITIONS = [
   { ticker: 'INTC', quantity: 102.20, entryPrice: 101.59 },
-  { ticker: 'NBIS', quantity: 43.46,  entryPrice: 208.63 },
+  { ticker: 'NBIS', quantity: 35.46,  entryPrice: 208.63 },
   { ticker: 'AAOI', quantity: 40.69, entryPrice: 111.21 },
   { ticker: 'MU',   quantity: 12.80,  entryPrice: 1018.46 },
   { ticker: 'CIEN', quantity: 24.42,  entryPrice: 429.61 },
@@ -17,10 +17,11 @@ const POSITIONS = [
   { ticker: 'LITE', quantity: 4.67,   entryPrice: 1117.08 },
   { ticker: 'TSM',  quantity: 10,     entryPrice: 426.50 },
   { ticker: 'NVDA', quantity: 14.64,  entryPrice: 218.52 },
+  { ticker: 'BE',   quantity: 10,     entryPrice: 220.68 },
 ];
 
-// Cash after the Oct 15 and Oct 19 trades. Must match CASH in api/quotes.js.
-const CASH = 30517.96;
+// Cash after the Oct 15, Oct 19 and Oct 27 trades. Must match CASH in api/quotes.js.
+const CASH = 29673.80;
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;

@@ -4,7 +4,7 @@
 
 const POSITIONS = [
   { ticker: 'INTC', name: 'Intel Corporation',      quantity: 102.20, entryPrice: 101.59 },
-  { ticker: 'NBIS', name: 'Nebius Group',           quantity: 43.46,  entryPrice: 208.63 },
+  { ticker: 'NBIS', name: 'Nebius Group',           quantity: 35.46,  entryPrice: 208.63 },
   { ticker: 'AAOI', name: 'Applied Optoelectronics', quantity: 40.69, entryPrice: 111.21 },
   { ticker: 'MU',   name: 'Micron Technology',      quantity: 12.80,  entryPrice: 1018.46 },
   { ticker: 'CIEN', name: 'Ciena Corporation',      quantity: 24.42,  entryPrice: 429.61 },
@@ -14,13 +14,15 @@ const POSITIONS = [
   { ticker: 'LITE', name: 'Lumentum Holdings',      quantity: 4.67,   entryPrice: 1117.08 },
   { ticker: 'TSM',  name: 'Taiwan Semiconductor',   quantity: 10,     entryPrice: 426.50 },
   { ticker: 'NVDA', name: 'NVIDIA Corporation',     quantity: 14.64,  entryPrice: 218.52 },
+  { ticker: 'BE',   name: 'Bloom Energy',           quantity: 10,     entryPrice: 220.68 },
 ];
 
 // Cash: the proceeds of the Oct 15 sales (31,629.23) plus the Oct 19 sales of NBIS and AAOI (6,352.87) minus the Oct 19
-// buys of TSM and NVDA (7,464.13), all at their fills.
+// buys of TSM and NVDA (7,464.13), plus the Oct 27 sale of NBIS (1,362.64) minus the Oct 27 buy of BE (2,206.80), all at
+// their fills.
 // It is part of the portfolio's value but not of any position, so the live value is positions + CASH. Must match
 // CASH in api/cron-update.js. Change it only when cash actually moves (a sale adds, a buy spends).
-const CASH = 30517.96;
+const CASH = 29673.80;
 
 const ENTRY_VALUE = POSITIONS.reduce((sum, p) => sum + p.quantity * p.entryPrice, 0);
 // Weights are shares of the whole portfolio: cost of what is held plus the cash, so the cash is a slice like any other.

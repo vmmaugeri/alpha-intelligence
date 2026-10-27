@@ -745,6 +745,15 @@ const CLOSED_POSITIONS = [
   {
     ticker: 'NBIS',
     status: 'Trimmed',
+    date: '2026-10-27',
+    opened: '2026-09-08',
+    buys: [{ qty: 8, price: 208.63 }],
+    sells: [{ qty: 8, price: 170.33 }],
+    note: 'Sold 8 shares ($1,363) to cut funding risk, as Nebius’s borrowing keeps rising.',
+  },
+  {
+    ticker: 'NBIS',
+    status: 'Trimmed',
     date: '2026-10-19',
     opened: '2026-08-28',
     buys: [{ qty: 11.41, price: 208.63 }],
@@ -1197,6 +1206,14 @@ const TRADE_LOG = {
       comment: 'Bought 14.64 shares ($3,199) after a 12% drop from its October peak.',
     },
   ],
+  BE: [
+    { date: '2026-08-25', kind: 'Opened', qty: 63.23, price: 213.05 },
+    { date: '2026-08-28', kind: 'Added', qty: 14, price: 217.74 },
+    {
+      date: '2026-10-27', kind: 'Opened', qty: 10, price: 220.68,
+      comment: 'Bought 10 shares ($2,207) as a first position in on-site power for AI data centres, a bottleneck the grid can’t fill fast enough.',
+    },
+  ],
 };
 
 // Every fill on the portfolio, one row each: [date, ticker, 'B' buy or 'S' sell, shares, price]. This is the exact
@@ -1277,6 +1294,8 @@ const TRADE_FILLS = [
   ['2026-10-19', 'AAOI', 'S', 55.04, 79.64],
   ['2026-10-19', 'TSM', 'B', 10, 426.5],
   ['2026-10-19', 'NVDA', 'B', 14.64, 218.52],
+  ['2026-10-27', 'NBIS', 'S', 8, 170.33],
+  ['2026-10-27', 'BE', 'B', 10, 220.68],
 ];
 
 function activeNote(ticker) {
