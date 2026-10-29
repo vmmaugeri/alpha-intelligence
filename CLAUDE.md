@@ -180,11 +180,17 @@ touching any of it:
   release) and compute the trade numbers from the fills. If a claim can't be
   confirmed, leave it out and tell Valerio instead of publishing it.
 
+- **Thought bubbles (2026-10-29):** `THOUGHTS` in `script.js` (keyed by ticker, `{ date, text }`) holds a view on a position
+  that is not a trade. It shows as a bubble with a green outline (`--accent`) and a "Oct 29 · Thought" date line, for
+  `NOTE_DAYS` like the others, and the newest of a trade bubble and a thought wins (`activeNote`). First one: LITE, bullish
+  on the Bloomberg report (Oct 28, unconfirmed) that Marvell is in advanced talks to buy Lumentum. Same rule as every
+  bubble: verify the claim first. On the same day all four Oct 19 bubbles (TSM, NVDA, the NBIS and AAOI trims) were removed.
+
 ## The weekly note (added 2026-10-19)
 
 - A short piece (conversational: "This past week was the worst...") shown as an outlined card with the date top left and
   two figures top right on the same line: the week's change and the number of trades. **It lives behind a small chip
-  on the headline row, "Thoughts on the week ›"**, and opens over the page (it takes no room, so the positions never
+  on the headline row, "Thoughts ›"** (renamed from "Thoughts on the week" on 2026-10-29, because Valerio does not want to retitle it every week), and opens over the page (it takes no room, so the positions never
   move); a click elsewhere or Escape closes it. The first version was an inline card that pushed the positions down
   ~260px and Valerio hated that; a teaser strip (+76px) and a wide-screen margin note were tried, and the chip won
   (2026-10-19). Do not put it back in the page flow. Data is `WEEKLY_NOTES` in `script.js`, newest first; only the

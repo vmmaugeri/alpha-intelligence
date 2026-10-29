@@ -758,7 +758,6 @@ const CLOSED_POSITIONS = [
     opened: '2026-08-28',
     buys: [{ qty: 11.41, price: 208.63 }],
     sells: [{ qty: 11.41, price: 172.61 }],
-    note: 'Sold 11.41 shares ($1,969) to reduce funding risk after CoreWeave’s bond selloff.',
   },
   {
     ticker: 'AAOI',
@@ -767,7 +766,6 @@ const CLOSED_POSITIONS = [
     opened: '2026-09-09',
     buys: [{ qty: 55.04, price: 111.21 }],
     sells: [{ qty: 55.04, price: 79.64 }],
-    note: 'Sold 55.04 shares ($4,383) as AOI keeps needing new money to fund its growth.',
   },
   {
     ticker: 'INTC',
@@ -1112,7 +1110,7 @@ function buildWeeklyCard(note, compact) {
   return { card, st };
 }
 
-// The note sits behind a small "Thoughts on the week" chip on the headline row and opens as a card over the page, so
+// The note sits behind a small "Thoughts" chip on the headline row and opens as a card over the page, so
 // it takes no room and the positions never move. Clicking anywhere else, or Escape, closes it. (A two-line teaser
 // strip and a wide-screen margin note were tried on 2026-10-19 and the chip won.)
 let weeklyOpen = false;
@@ -1133,7 +1131,7 @@ function renderWeekly() {
   chip.type = 'button';
   chip.className = 'weekly-chip';
   chip.setAttribute('aria-expanded', String(weeklyOpen));
-  chip.textContent = 'Thoughts on the week \u203a';
+  chip.textContent = 'Thoughts \u203a';
   const pop = document.createElement('div');
   pop.className = 'weekly-pop';
   pop.hidden = !weeklyOpen;
@@ -1195,16 +1193,10 @@ const TRADE_LOG = {
     { date: '2026-10-06', kind: 'Opened', qty: 7.16, price: 1117.08 },
   ],
   TSM: [
-    {
-      date: '2026-10-19', kind: 'Opened', qty: 10, price: 426.5,
-      comment: 'Bought 10 shares ($4,265) of the chipmaker every AI company relies on.',
-    },
+    { date: '2026-10-19', kind: 'Opened', qty: 10, price: 426.5 },
   ],
   NVDA: [
-    {
-      date: '2026-10-19', kind: 'Opened', qty: 14.64, price: 218.52,
-      comment: 'Bought 14.64 shares ($3,199) after a 12% drop from its October peak.',
-    },
+    { date: '2026-10-19', kind: 'Opened', qty: 14.64, price: 218.52 },
   ],
   BE: [
     { date: '2026-08-25', kind: 'Opened', qty: 63.23, price: 213.05 },
@@ -1298,11 +1290,23 @@ const TRADE_FILLS = [
   ['2026-10-27', 'BE', 'B', 10, 220.68],
 ];
 
+// Thought bubbles: a view on a position, not a trade. Keyed by ticker like TRADE_LOG, shown in green with a
+// "Thought" label for NOTE_DAYS after their date (same rule as the trade bubbles, newest one wins).
+const THOUGHTS = {
+  LITE: [
+    {
+      date: '2026-10-29',
+      text: 'Bullish on Lumentum. Bloomberg reports Marvell is in advanced talks to buy it, though no deal is confirmed. I own both.',
+    },
+  ],
+};
+
 function activeNote(ticker) {
   // The latest comment on a buy, or the note on a trim of this still-open position, whichever is newer.
   const candidates = (TRADE_LOG[ticker] || [])
     .filter((t) => t.comment)
     .map((t) => ({ date: t.date, text: t.comment }))
+    .concat((THOUGHTS[ticker] || []).map((t) => ({ date: t.date, text: t.text, thought: true })))
     .concat(
       CLOSED_POSITIONS.filter((pos) => pos.ticker === ticker && pos.status === 'Trimmed' && pos.note).map((pos) => ({
         date: pos.date,
@@ -1314,18 +1318,18 @@ function activeNote(ticker) {
   if (!latest) return null;
   const ageDays = (Date.now() - new Date(`${latest.date}T12:00:00Z`).getTime()) / 86400000;
   if (ageDays > NOTE_DAYS) return null;
-  return { text: latest.text, dateLabel: formatClosedDate(latest.date) };
+  return { text: latest.text, dateLabel: formatClosedDate(latest.date), thought: !!latest.thought };
 }
 
 // A note on an open position leads with the date the change was made. A closed position already shows its
 // date in the row, so its note doesn't need one.
-function buildNote(text, dateLabel, key) {
+function buildNote(text, dateLabel, key, thought) {
   const el = document.createElement('div');
-  el.className = 'note';
+  el.className = thought ? 'note note-thought' : 'note';
   if (dateLabel) {
     const date = document.createElement('span');
     date.className = 'note-date';
-    date.textContent = dateLabel;
+    date.textContent = thought ? `${dateLabel} \u00b7 Thought` : dateLabel;
     el.appendChild(date);
   }
   el.appendChild(document.createTextNode(text));
@@ -2957,7 +2961,7 @@ async function init() {
       const note = activeNote(p.ticker);
       if (note) {
         li.classList.add('has-note');
-        li.appendChild(buildNote(note.text, note.dateLabel, `pos:${p.ticker}:${note.dateLabel}`));
+        li.appendChild(buildNote(note.text, note.dateLabel, `pos:${p.ticker}:${note.dateLabel}${note.thought ? ':t' : ''}`, note.thought));
       }
       list.appendChild(li);
     });

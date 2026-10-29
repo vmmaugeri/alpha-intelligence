@@ -923,6 +923,26 @@ a.bench-label:focus-visible {
   border-bottom: 6px solid var(--note-line);
 }
 
+.note.note-thought {
+  border-color: var(--accent);
+}
+
+.note-thought::before {
+  border-bottom-color: var(--accent);
+}
+
+li.note-right > .note.note-thought::before {
+  border-right-color: var(--accent);
+}
+
+li.note-left > .note.note-thought::before {
+  border-left-color: var(--accent);
+}
+
+.note-thought .note-date {
+  color: var(--accent);
+}
+
 .note-date {
   display: block;
   margin-bottom: 2px;
